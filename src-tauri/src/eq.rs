@@ -205,7 +205,7 @@ where
             self.coeffs[i] = match i {
                 0 => low_shelf(self.sample_rate, freq, gain),
                 9 => high_shelf(self.sample_rate, freq, gain),
-                _ => peaking_eq(self.sample_rate, freq, gain, 1.414),
+                _ => peaking_eq(self.sample_rate, freq, gain, 0.92),
             };
         }
     }
