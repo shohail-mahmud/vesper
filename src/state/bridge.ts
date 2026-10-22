@@ -1,9 +1,5 @@
 /**
  * Typed boundary between the React UI and the native (Tauri 2 / Rust) core.
- *
- * Every native command here matches `src-tauri/src/commands.rs` 1-to-1.
- * In browser preview mode, File System / `<input webkitdirectory>` / HTML5 Drag & Drop
- * + WebAudio + `localStorage` back the exact same API.
  */
 
 import type { AppSnapshot, EqSettings, PlaybackState, RepeatMode, WidgetSettings } from "../types";
@@ -65,15 +61,14 @@ export function resolveArtworkUrl(artwork?: string | null): string | null {
   return artwork;
 }
 
-/* ------------------------------------------------------------------ *
- * Native Command Surface (exact mirror of src-tauri/src/commands.rs)
- * ------------------------------------------------------------------ */
-
 export interface NativeApi {
   snapshotLoad(): Promise<AppSnapshot | null>;
   snapshotSave(snapshot: AppSnapshot): Promise<void>;
   pickFolder(): Promise<string | null>;
   pickTracks(): Promise<string[]>;
+  pickCoverImage(): Promise<string | null>;
+  setTrackCover(trackId: string, imagePath: string): Promise<string>;
+  removeTrackCover(trackId: string): Promise<void>;
   importFolder(path: string, recursive: boolean): Promise<{
     added: number;
     skippedDuplicates: number;
@@ -134,6 +129,10 @@ export const native: NativeApi = {
   snapshotSave: (snapshot) => nativeInvoke("snapshot_save", { snapshot }),
   pickFolder: () => nativeInvoke<string | null>("pick_folder"),
   pickTracks: () => nativeInvoke<string[]>("pick_tracks"),
+  pickCoverImage: () => nativeInvoke<string | null>("pick_cover_image"),
+  setTrackCover: (trackId, imagePath) =>
+    nativeInvoke<string>("set_track_cover", { trackId, imagePath }),
+  removeTrackCover: (trackId) => nativeInvoke("remove_track_cover", { trackId }),
   importFolder: (path, recursive) => nativeInvoke("import_folder", { path, recursive }),
   importTracks: (paths) => nativeInvoke("import_tracks", { paths }),
   importDroppedPaths: (paths, recursive) => nativeInvoke("import_dropped_paths", { paths, recursive }),
@@ -180,10 +179,6 @@ export const events = {
   openFiles: (cb: (paths: string[]) => void): Promise<Unlisten> => nativeListen("app://open-files", cb),
 };
 
-/* ------------------------------------------------------------------ *
- * Persistence
- * ------------------------------------------------------------------ */
-
 const LS_SNAPSHOT = "vesper.snapshot.v2";
 
 export async function loadSnapshot(): Promise<AppSnapshot | null> {
@@ -217,15 +212,11 @@ export async function saveSnapshot(snapshot: AppSnapshot): Promise<void> {
   }
 }
 
-/* ------------------------------------------------------------------ *
- * Cross-window sync for the browser preview (`?window=widget`)
- * ------------------------------------------------------------------ */
-
 const CHANNEL = "vesper://state";
 
 export interface StateChannelMessage {
   kind?: "state" | "command";
-  command?: "toggle" | "next" | "prev" | "shuffle" | "repeat" | "openMain";
+  command?: "toggle" | "next" | "prev" | "shuffle" | "repeat" | "openMain" | "sync";
   seek?: number;
   volume?: number;
   playback?: Partial<PlaybackState>;
@@ -247,10 +238,6 @@ export function openStateChannel(onReceive: (message: StateChannelMessage) => vo
     close: () => channel.close(),
   };
 }
-
-/* ------------------------------------------------------------------ *
- * File & Folder pickers + HTML5 Drag-and-Drop (browser preview)
- * ------------------------------------------------------------------ */
 
 export interface PickedFile {
   file: File;
@@ -302,7 +289,43 @@ export async function pickTrackFiles(): Promise<File[]> {
   return inputToFileList("audio/*,.mp3,.flac,.wav,.m4a,.aac,.ogg,.oga,.opus,.wma,.aiff,.lrc", true, false);
 }
 
-/** Recursively extract dropped files + folders from a browser `DataTransfer`. */
+/** Browser preview helper: picks an image file & encodes a crisp 420px cover Data URL for persistent localStorage storage. */
+export async function pickCoverDataUrlWeb(): Promise<string | null> {
+  const files = await inputToFileList("image/png,image/jpeg,image/webp,image/gif,image/bmp", false, false);
+  const file = files[0];
+  if (!file) return null;
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rawUrl = typeof reader.result === "string" ? reader.result : null;
+      if (!rawUrl) {
+        resolve(null);
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        const maxSide = 300;
+        const scale = Math.min(1, maxSide / Math.max(img.width || 1, img.height || 1));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(rawUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.84));
+      };
+      img.onerror = () => resolve(rawUrl);
+      img.src = rawUrl;
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
 export async function readDroppedItems(
   dataTransfer: DataTransfer,
 ): Promise<{ folders: Map<string, PickedFile[]>; looseFiles: File[] }> {
