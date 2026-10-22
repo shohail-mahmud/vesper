@@ -1,14 +1,14 @@
-//! Metadata, artwork & lyrics extraction via `lofty`.
+//! Metadata, artwork & lyrics extraction via `lofty`, plus permanent custom song covers.
 //!
 //! Only the tag header block is read — never the full audio payload. Embedded
-//! cover art is deduplicated by SHA-256 into `%LOCALAPPDATA%\Vesper\artwork\`.
-//! Lyrics are resolved from `.lrc` sidecar files first, then embedded tags,
-//! then `.txt` sidecars.
+//! and user-assigned cover art are stored inside `%LOCALAPPDATA%\Vesper\artwork\`,
+//! so a custom cover stays permanently attached to a song even if the user deletes
+//! or moves the original image file from `Downloads` / `Desktop`.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use lofty::picture::PictureType;
 use lofty::prelude::*;
 use lofty::probe::Probe;
@@ -30,6 +30,34 @@ fn artwork_cache_path(cache_dir: &Path, bytes: &[u8], extension: &str) -> PathBu
     hasher.update(bytes);
     let digest = hex::encode(hasher.finalize());
     cache_dir.join(format!("{digest}.{extension}"))
+}
+
+/// Copies a user-selected image into `%LOCALAPPDATA%\Vesper\artwork\custom-<hash>.<ext>`
+/// so it persists permanently across restarts, folder refreshes, and source-file cleanup.
+pub fn save_custom_cover(cache_dir: &Path, track_id: &str, image_path: &Path) -> Result<String> {
+    std::fs::create_dir_all(cache_dir)?;
+    let bytes = std::fs::read(image_path)
+        .with_context(|| format!("Could not read image file: {}", image_path.display()))?;
+    if bytes.is_empty() || bytes.len() > 30_000_000 {
+        bail!("Cover image must be non-empty and under 30 MB.");
+    }
+
+    let ext = image_path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .filter(|e| matches!(e.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp"))
+        .unwrap_or_else(|| "jpg".into());
+
+    let mut hasher = Sha256::new();
+    hasher.update(track_id.as_bytes());
+    hasher.update(b":");
+    hasher.update(&bytes);
+    let digest = &hex::encode(hasher.finalize())[..24];
+
+    let target = cache_dir.join(format!("custom-{digest}.{ext}"));
+    std::fs::write(&target, &bytes)
+        .with_context(|| format!("Could not save cover art to {}", target.display()))?;
+    Ok(target.to_string_lossy().to_string())
 }
 
 pub fn read(path: &Path, cache_dir: &Path) -> Result<TrackMeta> {
@@ -85,7 +113,6 @@ pub fn read(path: &Path, cache_dir: &Path) -> Result<TrackMeta> {
         meta.lyrics = find_sidecar_lyrics(path);
     }
 
-    // Folder cover fallback (`cover.jpg` / `folder.jpg` / `front.jpg` next to audio file)
     if meta.artwork.is_none() {
         meta.artwork = find_folder_artwork(path);
     }
@@ -119,7 +146,6 @@ fn find_sidecar_lyrics(audio_path: &Path) -> Option<String> {
         }
     }
 
-    // Case-insensitive match inside parent folder
     if let Ok(entries) = std::fs::read_dir(parent) {
         for entry in entries.filter_map(|e| e.ok()) {
             let p = entry.path();
@@ -181,7 +207,7 @@ fn cache_artwork(cache_dir: &Path, picture: &lofty::picture::Picture) -> Option<
     Some(target)
 }
 
-/// Remove unreferenced cached cover art files so `%LOCALAPPDATA%\Vesper\artwork` never grows unbounded.
+/// Remove unreferenced cached cover art files while preserving all assigned custom covers.
 pub fn prune_artwork_cache(cache_dir: &Path, referenced: &HashSet<String>) -> usize {
     let mut removed = 0usize;
     let Ok(entries) = std::fs::read_dir(cache_dir) else {
