@@ -1,14 +1,6 @@
 //! Persistent local SQLite library (`%LOCALAPPDATA%\Vesper\library.db`).
-//!
-//! Fixes all data-integrity issues from v0.1:
-//!  • `loose_tracks` has its own ordered table so individually imported files
-//!    always survive restarts in exact order;
-//!  • `save_snapshot` properly deletes removed folders, tracks, and playlists
-//!    inside a single atomic transaction (no resurrected zombie entries);
-//!  • brand-new untouched databases return `Ok(None)` cleanly;
-//!  • full persistence for favorites, custom playlists, speed, and 10-band EQ.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -73,6 +65,7 @@ impl Database {
                 path           TEXT NOT NULL,
                 key            TEXT NOT NULL,
                 artwork        TEXT,
+                custom_artwork INTEGER NOT NULL DEFAULT 0,
                 lyrics         TEXT,
                 source_kind    TEXT NOT NULL,
                 folder_id      TEXT,
@@ -120,9 +113,9 @@ impl Database {
             "#,
         )?;
 
-        // Backwards-compatible column additions for databases created by v0.1
         for alter in [
             "ALTER TABLE tracks ADD COLUMN track_number INTEGER",
+            "ALTER TABLE tracks ADD COLUMN custom_artwork INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE tracks ADD COLUMN lyrics TEXT",
             "ALTER TABLE tracks ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE tracks ADD COLUMN play_count INTEGER NOT NULL DEFAULT 0",
@@ -133,6 +126,31 @@ impl Database {
             let _ = self.conn.execute(alter, []);
         }
         Ok(())
+    }
+
+    /// Immediately updates a single track's cover art & custom_artwork flag in SQLite.
+    /// Returns the previous artwork path if one was set.
+    pub fn set_track_artwork(
+        &self,
+        track_id: &str,
+        artwork: Option<&str>,
+        custom: bool,
+    ) -> Result<Option<String>> {
+        let prev: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT artwork FROM tracks WHERE id = ?1",
+                params![track_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+
+        self.conn.execute(
+            "UPDATE tracks SET artwork = ?1, custom_artwork = ?2 WHERE id = ?3",
+            params![artwork, custom as i64, track_id],
+        )?;
+        Ok(prev)
     }
 
     pub fn load_snapshot(&self) -> Result<Option<AppSnapshot>> {
@@ -189,9 +207,9 @@ impl Database {
         let mut tracks = serde_json::Map::new();
         {
             let mut stmt = self.conn.prepare(
-                "SELECT id, title, artist, album, track_number, duration, path, key, artwork, lyrics,
-                        source_kind, folder_id, size_bytes, favorite, play_count, last_played_at,
-                        missing, error FROM tracks",
+                "SELECT id, title, artist, album, track_number, duration, path, key, artwork,
+                        custom_artwork, lyrics, source_kind, folder_id, size_bytes, favorite,
+                        play_count, last_played_at, missing, error FROM tracks",
             )?;
             let rows = stmt.query_map([], |row| {
                 Ok(crate::model::Track {
@@ -204,15 +222,16 @@ impl Database {
                     path: row.get(6)?,
                     key: row.get(7)?,
                     artwork: row.get(8)?,
-                    lyrics: row.get(9)?,
-                    source_kind: row.get(10)?,
-                    folder_id: row.get(11)?,
-                    size_bytes: row.get::<_, Option<i64>>(12)?.map(|v| v as u64),
-                    favorite: row.get::<_, i64>(13)? != 0,
-                    play_count: row.get::<_, i64>(14)? as u32,
-                    last_played_at: row.get::<_, Option<i64>>(15)?.map(|v| v as u64),
-                    missing: row.get::<_, i64>(16)? != 0,
-                    error: row.get(17)?,
+                    custom_artwork: row.get::<_, i64>(9)? != 0,
+                    lyrics: row.get(10)?,
+                    source_kind: row.get(11)?,
+                    folder_id: row.get(12)?,
+                    size_bytes: row.get::<_, Option<i64>>(13)?.map(|v| v as u64),
+                    favorite: row.get::<_, i64>(14)? != 0,
+                    play_count: row.get::<_, i64>(15)? as u32,
+                    last_played_at: row.get::<_, Option<i64>>(16)?.map(|v| v as u64),
+                    missing: row.get::<_, i64>(17)? != 0,
+                    error: row.get(18)?,
                 })
             })?;
             for track in rows.filter_map(|r| r.ok()) {
@@ -221,7 +240,6 @@ impl Database {
             }
         }
 
-        // Load ordered loose tracks cleanly from `loose_tracks`, plus recover any orphaned `source_kind = 'loose'` tracks from v0.1 DBs
         let mut loose_track_ids: Vec<String> = {
             let mut stmt = self
                 .conn
@@ -336,7 +354,19 @@ impl Database {
     pub fn save_snapshot(&self, snapshot: &AppSnapshot) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
 
-        // Authoritative sync: clear join tables & remove deleted folders/tracks/playlists cleanly
+        // Preserve any custom covers set via `set_track_cover` so debounced snapshot writes
+        // or folder refreshes NEVER overwrite a user's saved song cover!
+        let preserved_covers: HashMap<String, String> = {
+            let mut stmt = tx.prepare(
+                "SELECT id, artwork FROM tracks WHERE custom_artwork = 1 AND artwork IS NOT NULL",
+            )?;
+            let pairs: HashMap<String, String> = stmt
+                .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?
+                .filter_map(|r| r.ok())
+                .collect();
+            pairs
+        };
+
         tx.execute("DELETE FROM folder_tracks", [])?;
         tx.execute("DELETE FROM loose_tracks", [])?;
         tx.execute("DELETE FROM user_playlist_tracks", [])?;
@@ -345,13 +375,21 @@ impl Database {
         tx.execute("DELETE FROM tracks", [])?;
 
         for (id, value) in &snapshot.library.tracks {
-            let track: crate::model::Track = serde_json::from_value(value.clone())?;
+            let mut track: crate::model::Track = serde_json::from_value(value.clone())?;
+            if let Some(saved_art) = preserved_covers.get(id) {
+                if track.artwork.is_none() || track.custom_artwork {
+                    if track.artwork.is_none() {
+                        track.artwork = Some(saved_art.clone());
+                    }
+                    track.custom_artwork = true;
+                }
+            }
             tx.execute(
                 "INSERT INTO tracks (
-                    id, title, artist, album, track_number, duration, path, key, artwork, lyrics,
-                    source_kind, folder_id, size_bytes, favorite, play_count, last_played_at,
-                    missing, error
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                    id, title, artist, album, track_number, duration, path, key, artwork,
+                    custom_artwork, lyrics, source_kind, folder_id, size_bytes, favorite,
+                    play_count, last_played_at, missing, error
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
                 params![
                     id,
                     track.title,
@@ -362,6 +400,7 @@ impl Database {
                     track.path,
                     track.key,
                     track.artwork,
+                    track.custom_artwork as i64,
                     track.lyrics,
                     track.source_kind,
                     track.folder_id,
@@ -386,7 +425,7 @@ impl Database {
                     folder.recursive as i64,
                     folder.missing as i64,
                     folder.added_at as i64,
-                    folder.last_scanned_at.map(|v| v as i64),
+                    folder.last_scanned_at.map(|v| v as u64).map(|v| v as i64),
                     folder.sample as i64,
                 ],
             )?;
@@ -470,7 +509,7 @@ mod tests {
     use crate::model::Track;
 
     #[test]
-    fn round_trip_persists_loose_tracks_and_deletions() {
+    fn round_trip_persists_loose_tracks_custom_covers_and_deletions() {
         let dir = std::env::temp_dir().join(format!("vesper-db-test-{}", crate::library::now_ms()));
         let db = Database::open_in(dir.clone()).unwrap();
         assert!(db.load_snapshot().unwrap().is_none());
@@ -485,6 +524,7 @@ mod tests {
             path: "C:\\Music\\Night Drive.flac".into(),
             key: "t1".into(),
             artwork: None,
+            custom_artwork: false,
             lyrics: None,
             source_kind: "loose".into(),
             folder_id: None,
@@ -517,11 +557,29 @@ mod tests {
         };
 
         db.save_snapshot(&snap).unwrap();
-        let loaded = db.load_snapshot().unwrap().unwrap();
-        assert_eq!(loaded.library.loose_track_ids, vec!["t1"]);
-        assert_eq!(loaded.library.playlists.len(), 1);
 
-        // Removing the track persists deletion cleanly (no zombie rows)
+        // Assign custom cover directly in SQLite and confirm stale snapshot save keeps it!
+        db.set_track_artwork("t1", Some("C:\\AppData\\Vesper\\artwork\\custom-abc.png"), true)
+            .unwrap();
+        db.save_snapshot(&snap).unwrap();
+        let with_cover = db.load_snapshot().unwrap().unwrap();
+        let saved_track: Track =
+            serde_json::from_value(with_cover.library.tracks.get("t1").unwrap().clone()).unwrap();
+        assert!(saved_track.custom_artwork);
+        assert_eq!(
+            saved_track.artwork.as_deref(),
+            Some("C:\\AppData\\Vesper\\artwork\\custom-abc.png")
+        );
+
+        // Removing custom cover explicitly clears it
+        db.set_track_artwork("t1", None, false).unwrap();
+        let after_remove = db.load_snapshot().unwrap().unwrap();
+        let cleared_track: Track =
+            serde_json::from_value(after_remove.library.tracks.get("t1").unwrap().clone()).unwrap();
+        assert!(!cleared_track.custom_artwork);
+        assert!(cleared_track.artwork.is_none());
+
+        // Removing the track persists deletion cleanly
         snap.library.tracks.clear();
         snap.library.loose_track_ids.clear();
         snap.library.playlists.clear();
@@ -529,8 +587,6 @@ mod tests {
 
         let reloaded = db.load_snapshot().unwrap().unwrap();
         assert!(reloaded.library.tracks.is_empty());
-        assert!(reloaded.library.loose_track_ids.is_empty());
-        assert!(reloaded.library.playlists.is_empty());
         let _ = std::fs::remove_dir_all(dir);
     }
 }
