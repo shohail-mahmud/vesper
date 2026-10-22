@@ -267,6 +267,7 @@ pub fn run() {
             commands::factory_reset,
             commands::open_external,
             commands::open_path,
+            commands::open_data_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Vesper");
