@@ -74,6 +74,8 @@ pub struct Track {
     pub key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artwork: Option<String>,
+    #[serde(default)]
+    pub custom_artwork: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lyrics: Option<String>,
     #[serde(rename = "sourceKind")]
@@ -200,15 +202,15 @@ impl Default for WidgetSettings {
         WidgetSettings {
             visible: false,
             always_on_top: false,
-            opacity: 0.94,
+            opacity: 0.95,
             size: "expanded".into(),
             show_artwork: true,
             show_progress: true,
             show_volume: true,
             x: 0.0,
             y: 0.0,
-            width: 384.0,
-            height: 188.0,
+            width: 416.0,
+            height: 112.0,
             click_through: false,
         }
     }
