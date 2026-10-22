@@ -1,18 +1,20 @@
 {
   "name": "vesper",
+  "version": "0.3.2",
   "private": true,
-  "version": "0.2.0",
-  "description": "Vesper — minimalist local music player for Windows",
+  "description": "Minimalist local music player for Windows with custom covers, native EQ, synced lyrics, and round desktop widget.",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "node scripts/test.mjs",
+    "dev": "vite --port 5173 --strictPort",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173",
     "typecheck": "tsc --noEmit",
+    "test": "node scripts/test.mjs",
     "icon": "node scripts/make-icon.mjs",
-    "tauri:dev": "node scripts/make-icon.mjs && tauri dev",
-    "tauri:build": "node scripts/make-icon.mjs && tauri build"
+    "make-icon": "node scripts/make-icon.mjs",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
     "clsx": "2.1.1",
