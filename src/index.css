@@ -194,7 +194,14 @@
 
 /* Clean softly-rounded floating desktop widget — zero rectangular shadow bleed outside corners */
 .widget-pill {
-  background: linear-gradient(145deg, rgba(28, 28, 34, 0.96), rgba(18, 18, 23, 0.96));
+  /* Glass opacity is applied to the smoked-glass BACKGROUND only (set from
+     Settings → Widget → Glass opacity via --glass-a1/--glass-a2), so the title,
+     artist, timecodes and controls stay fully opaque and readable. */
+  background: linear-gradient(
+    145deg,
+    rgba(28, 28, 34, var(--glass-a1, 0.96)),
+    rgba(18, 18, 23, var(--glass-a2, 0.9))
+  );
   border: 1.5px solid rgba(255, 255, 255, 0.15);
   border-radius: 20px;
   background-clip: padding-box;
