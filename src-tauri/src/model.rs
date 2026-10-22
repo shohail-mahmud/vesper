@@ -160,7 +160,6 @@ pub struct Settings {
     pub artwork_size: u32,
     #[serde(default = "default_theme")]
     pub theme: String,
-    #[serde(default = "default_true")]
 }
 
 impl Default for Settings {
