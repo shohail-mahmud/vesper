@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  chooseTrackCover,
+  clearTrackCover,
   enqueueTrack,
   importFolder,
   importTracks,
@@ -92,7 +94,7 @@ export function HomeScreen() {
               <div
                 role="menu"
                 aria-label="Import Music options"
-                className="rise absolute top-[calc(100%-22px)] left-0 z-40 mt-1.5 w-52 overflow-hidden rounded-[6px] border-[1.75px] border-[var(--tile-outline)] bg-paper-2 shadow-[0_14px_34px_rgba(0,0,0,0.16)]"
+                className="rise absolute top-[calc(100%-22px)] left-0 z-40 mt-1.5 w-52 overflow-hidden rounded-[12px] border-[1.75px] border-[var(--tile-outline)] bg-paper-2 shadow-[0_14px_34px_rgba(0,0,0,0.16)]"
               >
                 <button
                   type="button"
@@ -101,7 +103,7 @@ export function HomeScreen() {
                     setImportMenuOpen(false);
                     void importFolder();
                   }}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-[13px] font-medium text-ink transition-colors hover:bg-[var(--surface-hover)]"
+                  className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left text-[13px] font-medium text-ink transition-colors hover:bg-[var(--surface-hover)]"
                 >
                   <I.Folder size={17} />
                   <div>
@@ -117,7 +119,7 @@ export function HomeScreen() {
                     setImportMenuOpen(false);
                     void importTracks();
                   }}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-[13px] font-medium text-ink transition-colors hover:bg-[var(--surface-hover)]"
+                  className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left text-[13px] font-medium text-ink transition-colors hover:bg-[var(--surface-hover)]"
                 >
                   <I.NoteSingle size={17} />
                   <div>
@@ -162,7 +164,6 @@ export function HomeScreen() {
                     )}
                   </button>
 
-                  {/* Accessible hover/focus controls: Remove folder (never deletes files) + quick Play All */}
                   <button
                     type="button"
                     onClick={(e) => {
@@ -171,7 +172,7 @@ export function HomeScreen() {
                     }}
                     title="Remove folder from library (files stay untouched on disk)"
                     aria-label={`Remove ${folder.name} from library`}
-                    className="icon-btn absolute top-1.5 right-1.5 h-6 w-6 rounded bg-paper-2/90 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                    className="icon-btn absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-paper-2/90 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
                   >
                     <I.X size={13} />
                   </button>
@@ -185,7 +186,7 @@ export function HomeScreen() {
                       }}
                       title={`Play all tracks in ${folder.name}`}
                       aria-label={`Play all tracks in ${folder.name}`}
-                      className="icon-btn absolute right-1.5 bottom-1.5 h-7 w-7 rounded bg-paper-2/90 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                      className="icon-btn absolute right-1.5 bottom-1.5 h-7 w-7 rounded-full bg-paper-2/90 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
                     >
                       <I.Play size={13} />
                     </button>
@@ -225,14 +226,14 @@ export function HomeScreen() {
               <button
                 type="button"
                 onClick={() => void playFromList(looseTracks, 0, false)}
-                className="btn btn-ghost py-1 px-2.5 text-[11.5px]"
+                className="btn btn-ghost py-1.5 px-3 text-[11.5px]"
               >
                 <I.Play size={12} /> Play All
               </button>
               <button
                 type="button"
                 onClick={() => void playFromList(looseTracks, 0, true)}
-                className="btn btn-ghost py-1 px-2.5 text-[11.5px]"
+                className="btn btn-ghost py-1.5 px-3 text-[11.5px]"
               >
                 <I.Shuffle size={12} /> Shuffle
               </button>
@@ -253,6 +254,7 @@ export function HomeScreen() {
               {looseTracks.map((track, idx) => {
                 const isCurrent = playback.trackId === track.id;
                 const isPlaying = isCurrent && playback.status === "playing";
+                const art = selectors.artworkFor(track);
                 return (
                   <div key={track.id} className="group relative flex flex-col items-center">
                     <div className="relative w-full">
@@ -260,19 +262,35 @@ export function HomeScreen() {
                         type="button"
                         onClick={() => void playFromList(looseTracks, idx, state.playback.shuffle)}
                         aria-label={`Play ${track.title}`}
-                        className={`track-tile cursor-pointer ${
-                          isCurrent ? "!border-solid ring-2 ring-[var(--tile-outline)]/25" : ""
-                        }`}
+                        className={`track-tile relative cursor-pointer ${
+                          isCurrent || art ? "!border-solid" : ""
+                        } ${isCurrent ? "ring-2 ring-[var(--tile-outline)]/25" : ""}`}
                       >
-                        {isPlaying ? <PlayingBadge playing /> : <I.NoteSingle size={28} />}
+                        {art ? (
+                          <img
+                            src={art}
+                            alt=""
+                            className="h-full w-full object-cover"
+                            draggable={false}
+                          />
+                        ) : isPlaying ? (
+                          <PlayingBadge playing />
+                        ) : (
+                          <I.NoteSingle size={28} />
+                        )}
+
                         {track.duration > 0 && (
-                          <span className="tnum absolute bottom-2.5 text-[10px] text-ink-3">
+                          <span
+                            className={`tnum absolute bottom-2.5 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              art ? "bg-black/65 text-white" : "text-ink-3"
+                            }`}
+                          >
                             {formatTime(track.duration)}
                           </span>
                         )}
                       </button>
 
-                      {/* Hover quick actions: Favorite, Queue next, Remove from library */}
+                      {/* Favorite */}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -281,13 +299,29 @@ export function HomeScreen() {
                         }}
                         title={track.favorite ? "Unfavorite" : "Favorite"}
                         aria-label={track.favorite ? "Remove from favorites" : "Add to favorites"}
-                        className={`icon-btn absolute top-2 left-2 h-6 w-6 rounded-full bg-paper-2/90 transition-opacity ${
+                        className={`icon-btn absolute top-2 left-2 h-6 w-6 rounded-full bg-paper-2/92 shadow-xs transition-opacity ${
                           track.favorite ? "opacity-100 text-[#D93848]" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
                         }`}
                       >
                         {track.favorite ? <I.HeartFilled size={12} /> : <I.Heart size={12} />}
                       </button>
 
+                      {/* Set / Remove Cover quick button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (art && e.shiftKey) void clearTrackCover(track.id);
+                          else void chooseTrackCover(track.id);
+                        }}
+                        title={art ? "Change cover (Shift+Click to remove cover)" : "Add song cover"}
+                        aria-label={`Set cover image for ${track.title}`}
+                        className="icon-btn absolute bottom-2 left-2 h-6 w-6 rounded-full bg-paper-2/92 opacity-0 shadow-xs transition-opacity group-hover:opacity-100 focus:opacity-100"
+                      >
+                        <I.ImagePlus size={12} />
+                      </button>
+
+                      {/* Queue */}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -296,11 +330,12 @@ export function HomeScreen() {
                         }}
                         title="Add to queue"
                         aria-label={`Add ${track.title} to queue`}
-                        className="icon-btn absolute right-2 bottom-2 h-6 w-6 rounded-full bg-paper-2/90 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                        className="icon-btn absolute right-2 bottom-2 h-6 w-6 rounded-full bg-paper-2/92 opacity-0 shadow-xs transition-opacity group-hover:opacity-100 focus:opacity-100"
                       >
                         <I.ListPlus size={13} />
                       </button>
 
+                      {/* Remove from library */}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -309,7 +344,7 @@ export function HomeScreen() {
                         }}
                         title="Remove from library (file stays on disk)"
                         aria-label={`Remove ${track.title} from library`}
-                        className="icon-btn absolute top-2 right-2 h-6 w-6 rounded-full bg-paper-2/90 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                        className="icon-btn absolute top-2 right-2 h-6 w-6 rounded-full bg-paper-2/92 opacity-0 shadow-xs transition-opacity group-hover:opacity-100 focus:opacity-100"
                       >
                         <I.X size={12} />
                       </button>
