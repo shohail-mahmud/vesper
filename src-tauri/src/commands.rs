@@ -60,6 +60,102 @@ pub async fn pick_tracks(app: AppHandle) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+pub async fn pick_cover_image(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let file = app
+        .dialog()
+        .file()
+        .add_filter("Cover Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp"])
+        .blocking_pick_file();
+    Ok(file.map(|p| p.to_string()))
+}
+
+/// Copies a selected image into `%LOCALAPPDATA%\Vesper\artwork\custom-*` and saves it
+/// permanently on the song in SQLite until the user explicitly removes it.
+#[tauri::command]
+pub fn set_track_cover(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    track_id: String,
+    image_path: String,
+) -> Result<String, String> {
+    let db = state.db.lock();
+    let cache_dir = db.data_dir.join("artwork");
+    let saved_path = crate::metadata::save_custom_cover(
+        &cache_dir,
+        &track_id,
+        std::path::Path::new(&image_path),
+    )
+    .map_err(|e| e.to_string())?;
+
+    if let Ok(Some(old)) = db.set_track_artwork(&track_id, Some(&saved_path), true) {
+        if old != saved_path && old.contains("custom-") {
+            let _ = std::fs::remove_file(&old);
+        }
+    }
+
+    // If this song is currently loaded, update the Windows media card immediately too
+    let player_state = state.player.state();
+    if player_state.track_id.as_deref() == Some(track_id.as_str()) {
+        if let Ok(Some(snap)) = db.load_snapshot() {
+            if let Some(val) = snap.library.tracks.get(&track_id) {
+                if let Ok(track) = serde_json::from_value::<crate::model::Track>(val.clone()) {
+                    state.smtc.update(
+                        player_state.status,
+                        player_state.position,
+                        Some(&track),
+                    );
+                }
+            }
+        }
+    }
+    drop(db);
+
+    let _ = app.emit("library://changed", ());
+    Ok(saved_path)
+}
+
+/// Removes the cover from a song in SQLite & cleans up its custom cached file.
+#[tauri::command]
+pub fn remove_track_cover(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    track_id: String,
+) -> Result<(), String> {
+    let db = state.db.lock();
+    if let Ok(Some(old)) = db
+        .set_track_artwork(&track_id, None, false)
+        .map_err(|e| e.to_string())
+        .map(Some)
+    {
+        if let Some(prev_path) = old {
+            if prev_path.contains("custom-") {
+                let _ = std::fs::remove_file(&prev_path);
+            }
+        }
+    }
+
+    let player_state = state.player.state();
+    if player_state.track_id.as_deref() == Some(track_id.as_str()) {
+        if let Ok(Some(snap)) = db.load_snapshot() {
+            if let Some(val) = snap.library.tracks.get(&track_id) {
+                if let Ok(track) = serde_json::from_value::<crate::model::Track>(val.clone()) {
+                    state.smtc.update(
+                        player_state.status,
+                        player_state.position,
+                        Some(&track),
+                    );
+                }
+            }
+        }
+    }
+    drop(db);
+
+    let _ = app.emit("library://changed", ());
+    Ok(())
+}
+
+#[tauri::command]
 pub fn import_folder(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -168,6 +264,7 @@ pub fn import_tracks(
             path: path.clone(),
             key: id.clone(),
             artwork: meta.artwork,
+            custom_artwork: false,
             lyrics: meta.lyrics,
             source_kind: "loose".into(),
             folder_id: None,
@@ -200,7 +297,6 @@ pub fn import_tracks(
     }))
 }
 
-/// Handles mixed Drag & Drop payloads (folders + audio files dropped together from Explorer).
 #[tauri::command]
 pub fn import_dropped_paths(
     app: AppHandle,
@@ -583,12 +679,21 @@ pub fn app_quit(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+fn pill_dimensions(size: &str) -> (f64, f64) {
+    if size == "compact" {
+        (364.0, 96.0)
+    } else {
+        (424.0, 112.0)
+    }
+}
+
 #[tauri::command]
 pub fn widget_show(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let settings = state.widget.lock().clone();
     if let Some(window) = app.get_webview_window("widget") {
+        let (w, h) = pill_dimensions(&settings.size);
         let _ = window.set_always_on_top(settings.always_on_top);
-        let _ = window.set_size(tauri::LogicalSize::new(settings.width, settings.height));
+        let _ = window.set_size(tauri::LogicalSize::new(w, h));
         if settings.x > 0.0 || settings.y > 0.0 {
             let _ = window.set_position(tauri::LogicalPosition::new(settings.x, settings.y));
         }
@@ -620,7 +725,15 @@ pub fn widget_set_always_on_top(
 }
 
 #[tauri::command]
-pub fn widget_set_bounds(state: State<'_, AppState>, settings: WidgetSettings) -> Result<(), String> {
+pub fn widget_set_bounds(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    settings: WidgetSettings,
+) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("widget") {
+        let (w, h) = pill_dimensions(&settings.size);
+        let _ = window.set_size(tauri::LogicalSize::new(w, h));
+    }
     *state.widget.lock() = settings;
     Ok(())
 }
