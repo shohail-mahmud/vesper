@@ -1,8 +1,9 @@
 [package]
 name = "vesper"
-version = "0.2.0"
-description = "Vesper — a lightweight local music player for Windows"
+version = "0.3.2"
+description = "Minimalist local music player for Windows with custom covers, native EQ, synced lyrics, and round desktop widget."
 authors = ["Shohail Mahmud"]
+license = "MIT"
 edition = "2021"
 rust-version = "1.77"
 
@@ -19,33 +20,16 @@ tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-
-# Persistent local library (bundled SQLite — no external service, no network).
 rusqlite = { version = "0.32", features = ["bundled"] }
-
-# Audio playback + multi-format decoding (MP3, WAV, FLAC, M4A/AAC, ALAC, OGG, AIFF).
-rodio = { version = "0.20", features = ["symphonia-all"] }
-
-# Metadata, embedded lyrics & embedded artwork extraction.
+rodio = { version = "0.20", default-features = true, features = ["symphonia-all"] }
 lofty = "0.21"
-
 walkdir = "2"
-sha2 = "0.10"
-hex = "0.4"
+dirs = "5"
+parking_lot = "0.12"
 anyhow = "1"
 thiserror = "1"
-parking_lot = "0.12"
-dirs = "5"
+sha2 = "0.10"
+hex = "0.4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 souvlaki = "0.7"
-
-[profile.release]
-codegen-units = 1
-lto = true
-opt-level = "s"
-panic = "abort"
-strip = true
-
-[profile.release.package."*"]
-opt-level = "s"
