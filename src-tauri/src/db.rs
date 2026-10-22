@@ -491,6 +491,40 @@ impl Database {
         tx.commit()?;
         Ok(())
     }
+
+    /// Clean Data — full factory reset of Vesper's own persisted state.
+    ///
+    /// Deletes every row in every Vesper table (library, folders, loose tracks,
+    /// user playlists, playback/EQ state and preferences) and removes all cached
+    /// cover thumbnails from `<data_dir>\\artwork`. The user's actual audio files
+    /// live elsewhere on disk and are never touched by this method.
+    pub fn wipe_all(&self) -> Result<()> {
+        self.conn.execute_batch(
+            "PRAGMA foreign_keys = OFF;
+             DELETE FROM user_playlist_tracks;
+             DELETE FROM user_playlists;
+             DELETE FROM folder_tracks;
+             DELETE FROM loose_tracks;
+             DELETE FROM tracks;
+             DELETE FROM folders;
+             DELETE FROM playback;
+             DELETE FROM settings;
+             PRAGMA foreign_keys = ON;",
+        )?;
+        // Reclaim the space so a fresh library starts from a small database.
+        self.conn.execute_batch("VACUUM;")?;
+
+        let artwork_dir = self.data_dir.join("artwork");
+        if let Ok(entries) = std::fs::read_dir(&artwork_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    let _ = std::fs::remove_file(path);
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 trait OpenPathExt {
