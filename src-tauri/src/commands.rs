@@ -661,7 +661,7 @@ pub fn player_set_repeat(state: State<'_, AppState>, value: RepeatMode) -> Resul
     Ok(())
 }
 
-/* -------------------------- windows & tray ------------------------- */
+/* ----------------------------- windows ----------------------------- */
 
 #[tauri::command]
 pub fn main_window_show(app: AppHandle) -> Result<(), String> {
