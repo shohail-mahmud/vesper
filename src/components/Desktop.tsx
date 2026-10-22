@@ -41,7 +41,7 @@ function TopBar({ searchInputRef }: { searchInputRef: React.RefObject<HTMLInputE
     toast(
       "info",
       "Native window control",
-      "In the Windows app, this controls the native OS frame (and minimizes to System Tray when enabled).",
+      "In the Windows app this controls the native window frame. Closing the window always quits Vesper — there is no tray icon.",
     );
   };
 
