@@ -627,20 +627,30 @@ export function InspectorDrawer() {
       {/* 3. 10-BAND NATIVE BIQUAD EQUALIZER + PLAYBACK SPEED */}
       {drawer === "eq" && (
         <div className="space-y-5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <div>
-              <div className="text-[13px] font-medium text-ink">10-Band Equalizer</div>
-              <div className="text-[11px] text-ink-3">Real-time biquad audio filter</div>
+              <div className="text-[13px] font-semibold text-ink">10-Band Equalizer</div>
+              <div className="text-[11px] text-ink-3">Live real-time audio filter</div>
             </div>
-            <button
-              type="button"
-              onClick={() => setEq({ ...playback.eq, enabled: !playback.eq.enabled })}
-              className={`btn py-1 px-3 text-[11.5px] ${
-                playback.eq.enabled ? "btn-primary" : "btn-ghost"
-              }`}
-            >
-              {playback.eq.enabled ? "Enabled" : "Bypassed"}
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => applyEqPreset("flat")}
+                title="Reset all bands to 0 dB"
+                className="btn btn-ghost py-1 px-2.5 text-[11px]"
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                onClick={() => setEq({ ...playback.eq, enabled: !playback.eq.enabled })}
+                className={`btn py-1 px-3 text-[11.5px] ${
+                  playback.eq.enabled ? "btn-primary" : "btn-ghost"
+                }`}
+              >
+                {playback.eq.enabled ? "On" : "Off"}
+              </button>
+            </div>
           </div>
 
           <div>
@@ -648,7 +658,7 @@ export function InspectorDrawer() {
             <select
               value={playback.eq.preset}
               onChange={(e) => applyEqPreset(e.target.value)}
-              className="mt-1.5 w-full rounded-[6px] border-[1.5px] border-[var(--tile-outline)] bg-paper px-2.5 py-1.5 text-[12.5px] text-ink outline-none"
+              className="mt-1.5 w-full cursor-pointer rounded-[10px] border-[1.5px] border-[var(--tile-outline)] bg-paper px-3 py-2 text-[12.5px] font-medium text-ink outline-none"
             >
               {EQ_PRESETS.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -663,8 +673,8 @@ export function InspectorDrawer() {
 
           <div>
             <div className="flex items-center justify-between text-[11.5px]">
-              <span className="plate text-ink-3">Preamp</span>
-              <span className="tnum text-ink-2">
+              <span className="plate text-ink-3">Preamp Gain</span>
+              <span className="tnum font-medium text-ink-2">
                 {playback.eq.preamp > 0 ? `+${playback.eq.preamp}` : playback.eq.preamp} dB
               </span>
             </div>
@@ -685,47 +695,98 @@ export function InspectorDrawer() {
               className="vesper-range mt-1.5"
               style={
                 {
-                  "--track-h": "4px",
+                  "--track-h": "5px",
                   "--thumb-bg": "var(--text-primary)",
                 } as React.CSSProperties
               }
             />
           </div>
 
-          {/* 10 vertical band sliders */}
-          <div className="grid grid-cols-10 gap-1 pt-2">
-            {EQ_LABELS.map((label, idx) => {
-              const val = playback.eq.bands[idx] ?? 0;
-              return (
-                <div key={label} className="flex flex-col items-center gap-2">
-                  <span className="tnum text-[9.5px] text-ink-3">
-                    {val > 0 ? `+${Math.round(val)}` : Math.round(val)}
-                  </span>
-                  <div className="flex h-28 items-center justify-center">
-                    <input
-                      type="range"
-                      min={-12}
-                      max={12}
-                      step={0.5}
-                      value={val}
+          {/* 10 custom precision vertical faders (+12 dB at TOP, 0 dB center, -12 dB at BOTTOM) */}
+          <div className="rounded-[14px] border border-rule bg-paper p-3">
+            <div className="grid grid-cols-10 gap-1">
+              {EQ_LABELS.map((label, idx) => {
+                const val = playback.eq.bands[idx] ?? 0;
+                // Map -12..+12 -> 0..100% from bottom (0% = -12 dB, 50% = 0 dB, 100% = +12 dB)
+                const normPct = ((val + 12) / 24) * 100;
+                const fillBottom = val >= 0 ? 50 : normPct;
+                const fillHeight = Math.abs(normPct - 50);
+
+                const applyPointerY = (trackEl: HTMLDivElement, clientY: number) => {
+                  const rect = trackEl.getBoundingClientRect();
+                  const ratioFromBottom = 1 - Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
+                  const db = clampDb(ratioFromBottom * 24 - 12);
+                  const bands = [...playback.eq.bands];
+                  bands[idx] = db;
+                  setEq({
+                    ...playback.eq,
+                    enabled: true,
+                    preset: "custom",
+                    bands,
+                  });
+                };
+
+                return (
+                  <div key={label} className="flex flex-col items-center gap-2 select-none">
+                    <span className="tnum text-[9.5px] font-semibold text-ink-2">
+                      {val > 0 ? `+${Math.round(val)}` : Math.round(val)}
+                    </span>
+
+                    <div
+                      role="slider"
+                      tabIndex={0}
                       aria-label={`${label} Hz gain`}
-                      onChange={(e) => {
+                      aria-valuemin={-12}
+                      aria-valuemax={12}
+                      aria-valuenow={val}
+                      title={`${label} Hz: ${val > 0 ? `+${val}` : val} dB (double-click to reset)`}
+                      onDoubleClick={() => {
                         const bands = [...playback.eq.bands];
-                        bands[idx] = clampDb(Number(e.target.value));
-                        setEq({
-                          ...playback.eq,
-                          enabled: true,
-                          preset: "custom",
-                          bands,
-                        });
+                        bands[idx] = 0;
+                        setEq({ ...playback.eq, enabled: true, preset: "custom", bands });
                       }}
-                      className="h-24 w-5 cursor-pointer accent-[var(--text-primary)] [writing-mode:vertical-lr] [direction:rtl]"
-                    />
+                      onPointerDown={(e) => {
+                        const el = e.currentTarget;
+                        el.setPointerCapture(e.pointerId);
+                        applyPointerY(el, e.clientY);
+                      }}
+                      onPointerMove={(e) => {
+                        if (e.buttons === 1) applyPointerY(e.currentTarget, e.clientY);
+                      }}
+                      className="group relative flex h-32 w-full cursor-pointer items-center justify-center"
+                    >
+                      {/* Center 0 dB tick line */}
+                      <span className="pointer-events-none absolute top-1/2 h-[1px] w-3.5 -translate-y-1/2 bg-ink/25" />
+
+                      {/* Vertical rail */}
+                      <div className="pointer-events-none relative h-full w-[5px] rounded-full bg-ink/12">
+                        <div
+                          className={`absolute right-0 left-0 rounded-full ${
+                            playback.eq.enabled ? "bg-[var(--tile-outline)]" : "bg-ink/35"
+                          }`}
+                          style={{
+                            bottom: `${fillBottom}%`,
+                            height: `${fillHeight}%`,
+                          }}
+                        />
+                      </div>
+
+                      {/* Thumb handle */}
+                      <span
+                        className={`pointer-events-none absolute h-3 w-3 translate-y-1/2 rounded-full border-[1.5px] shadow-xs transition-transform group-hover:scale-110 ${
+                          playback.eq.enabled
+                            ? "border-[var(--tile-outline)] bg-paper-2"
+                            : "border-ink/40 bg-paper-2"
+                        }`}
+                        style={{ bottom: `${normPct}%` }}
+                      />
+                    </div>
+
+                    <span className="tnum text-[9.5px] font-medium text-ink-3">{label}</span>
                   </div>
-                  <span className="tnum text-[9.5px] font-medium text-ink-2">{label}</span>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
           <div className="border-t border-rule pt-4">
