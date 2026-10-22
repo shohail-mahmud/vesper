@@ -131,7 +131,11 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                         }
                     }
                 }
-                "quit" => app.exit(0),
+                "quit" => {
+                    // Stop the audio engine first so no sound can outlive the process.
+                    state.player.stop();
+                    app.exit(0)
+                }
                 _ => {}
             }
         })
@@ -271,33 +275,55 @@ pub fn run() {
                     }
                 }
                 WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
-                    let should_hide = window
+                    // BUG FIX (ghost background playback): previously closing
+                    // the main window ALWAYS hid it to the tray whenever music
+                    // was playing or the widget was visible — so the app never
+                    // actually closed and the song kept playing invisibly.
+                    // Now: closing main QUITS and STOPS playback, unless the
+                    // user explicitly opted into "Close to tray" in Settings.
+                    let close_to_tray = window
                         .app_handle()
                         .try_state::<AppState>()
                         .map(|st| {
-                            let playing = matches!(
-                                st.player.state().status,
-                                model::PlaybackStatus::Playing
-                            );
-                            let close_to_tray = st
-                                .db
+                            st.db
                                 .lock()
                                 .load_snapshot()
                                 .ok()
                                 .flatten()
                                 .map(|s| s.settings.close_to_tray)
-                                .unwrap_or(false);
-                            let widget_vis = window
-                                .app_handle()
-                                .get_webview_window("widget")
-                                .and_then(|w| w.is_visible().ok())
-                                .unwrap_or(false);
-                            playing || widget_vis || close_to_tray
+                                .unwrap_or(false)
                         })
                         .unwrap_or(false);
-                    if should_hide {
+                    if close_to_tray {
                         api.prevent_close();
                         let _ = window.hide();
+                    } else {
+                        if let Some(st) = window.app_handle().try_state::<AppState>() {
+                            st.player.stop();
+                        }
+                        // Exit explicitly: the (hidden) widget window still
+                        // exists, so merely closing main would leave a silent
+                        // background process running.
+                        window.app_handle().exit(0);
+                    }
+                }
+                WindowEvent::CloseRequested { api, .. } if window.label() == "widget" => {
+                    // Closing the LAST visible window must quit + stop
+                    // playback. If the main window is still open, just hide
+                    // the widget (never destroy it, so it can reopen later).
+                    let app = window.app_handle();
+                    let main_visible = app
+                        .get_webview_window("main")
+                        .and_then(|w| w.is_visible().ok())
+                        .unwrap_or(false);
+                    if main_visible {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    } else {
+                        if let Some(st) = app.try_state::<AppState>() {
+                            st.player.stop();
+                        }
+                        app.exit(0);
                     }
                 }
                 _ => {}
@@ -341,6 +367,7 @@ pub fn run() {
             commands::app_quit,
             commands::widget_show,
             commands::widget_hide,
+            commands::widget_close,
             commands::widget_set_always_on_top,
             commands::widget_set_bounds,
             commands::open_path,
