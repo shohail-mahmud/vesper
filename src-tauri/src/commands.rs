@@ -758,8 +758,46 @@ pub fn widget_set_bounds(
         let (w, h) = pill_dimensions(&settings.size);
         let _ = window.set_size(tauri::LogicalSize::new(w, h));
     }
-    *state.widget.lock() = settings;
+    *state.widget.lock() = settings.clone();
+    // Push the new appearance (size, glass opacity, which rows are visible) to
+    // the widget webview straight away — Settings lives in the main window, so
+    // without this broadcast the widget only refreshed after a restart.
+    let _ = app.emit("widget://settings", &settings);
     Ok(())
+}
+
+/// Clean Data — full factory reset.
+///
+/// Stops playback, erases Vesper's own persisted state (library rows,
+/// user playlists, custom cover paths, EQ + preferences, and the cached
+/// artwork folder) and relaunches the app so it boots brand-new.
+///
+/// The user's actual audio files on disk are never read, moved or deleted:
+/// only `%LOCALAPPDATA%\Vesper` is affected.
+#[tauri::command]
+pub fn factory_reset(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    state.player.stop();
+    {
+        let db = state.db.lock();
+        db.wipe_all().map_err(|e| e.to_string())?;
+    }
+    // Restart from a worker thread: `restart()` diverges and must not run while
+    // the IPC/event loop is still unwinding from this command.
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        handle.restart();
+    });
+    Ok(())
+}
+
+/// Open an https URL in the user's default browser (About → source code).
+#[tauri::command]
+pub fn open_external(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") {
+        return Err("Only https:// links can be opened".into());
+    }
+    tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
