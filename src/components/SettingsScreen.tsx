@@ -186,20 +186,10 @@ export function SettingsScreen() {
       </Section>
 
       <Section
-        index="02 / Window & Library"
-        title="Closing & imports"
-        caption="How Vesper quits and how folders are indexed when added."
+        index="02 / Library"
+        title="Scanning & imports"
+        caption="How folders and audio files are indexed when added. Closing the last window always ends the session — nothing keeps running in the background."
       >
-        <Row
-          label="Minimize to Windows System Tray on close"
-          description="Off by default: closing the main window quits Vesper and stops the music. Turn this on only if you want closing the main window to hide Vesper to the system tray and keep background playback and hardware media keys active. Closing the widget afterwards still quits Vesper and stops playback."
-        >
-          <Toggle
-            checked={settings.closeToTray}
-            onChange={(v) => setSettings({ closeToTray: v })}
-            label="Close to tray"
-          />
-        </Row>
         <Row
           label="Include nested subfolders when importing a folder"
           description="Off by default so importing a top-level directory never pulls in unwanted subfolder trees unless requested."
