@@ -1,4 +1,8 @@
-//! Application lifecycle, System Tray, Windows DWM & SMTC sync, Drag & Drop, and CLI file open.
+//! Application lifecycle, Windows DWM & SMTC sync, Drag & Drop, and CLI file open.
+//!
+//! Vesper deliberately has NO system-tray icon: closing the last visible window
+//! always stops playback and quits the process, so nothing can keep running (or
+//! playing) invisibly in the background.
 
 mod commands;
 mod db;
@@ -12,8 +16,6 @@ mod smtc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{DragDropEvent, Emitter, Manager, WindowEvent};
 
 use commands::AppState;
@@ -78,90 +80,6 @@ fn configure_windows_dwm(app: &tauri::AppHandle) {
 #[cfg(not(target_os = "windows"))]
 fn configure_windows_dwm(_app: &tauri::AppHandle) {}
 
-fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
-    let open_item = MenuItemBuilder::with_id("open", "Open Vesper Library").build(app)?;
-    let toggle_item = MenuItemBuilder::with_id("toggle", "Play / Pause").build(app)?;
-    let next_item = MenuItemBuilder::with_id("next", "Next Track").build(app)?;
-    let prev_item = MenuItemBuilder::with_id("prev", "Previous Track").build(app)?;
-    let widget_item = MenuItemBuilder::with_id("widget", "Toggle Desktop Widget").build(app)?;
-    let sep1 = PredefinedMenuItem::separator(app)?;
-    let sep2 = PredefinedMenuItem::separator(app)?;
-    let quit_item = MenuItemBuilder::with_id("quit", "Quit Vesper").build(app)?;
-
-    let menu = MenuBuilder::new(app)
-        .items(&[
-            &open_item,
-            &sep1,
-            &toggle_item,
-            &prev_item,
-            &next_item,
-            &widget_item,
-            &sep2,
-            &quit_item,
-        ])
-        .build()?;
-
-    let mut builder = TrayIconBuilder::with_id("vesper-tray")
-        .menu(&menu)
-        .tooltip("Vesper — Local Music Player")
-        .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| {
-            let Some(state) = app.try_state::<AppState>() else {
-                return;
-            };
-            match event.id().as_ref() {
-                "open" => {
-                    if let Some(win) = app.get_webview_window("main") {
-                        let _ = win.show();
-                        let _ = win.unminimize();
-                        let _ = win.set_focus();
-                    }
-                }
-                "toggle" => state.player.toggle(),
-                "next" => state.player.next(),
-                "prev" => state.player.previous(),
-                "widget" => {
-                    if let Some(w) = app.get_webview_window("widget") {
-                        let vis = w.is_visible().unwrap_or(false);
-                        if vis {
-                            let _ = w.hide();
-                        } else {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
-                    }
-                }
-                "quit" => {
-                    // Stop the audio engine first so no sound can outlive the process.
-                    state.player.stop();
-                    app.exit(0)
-                }
-                _ => {}
-            }
-        })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                if let Some(win) = tray.app_handle().get_webview_window("main") {
-                    let _ = win.show();
-                    let _ = win.unminimize();
-                    let _ = win.set_focus();
-                }
-            }
-        });
-
-    if let Some(icon) = app.default_window_icon().cloned() {
-        builder = builder.icon(icon);
-    }
-
-    builder.build(app)?;
-    Ok(())
-}
-
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -198,10 +116,6 @@ pub fn run() {
                 widget: Mutex::new(widget),
                 smtc,
             });
-
-            if let Err(err) = build_tray(app.handle()) {
-                eprintln!("[vesper] system tray unavailable: {err}");
-            }
 
             let cli_files: Vec<String> = std::env::args()
                 .skip(1)
@@ -274,38 +188,15 @@ pub fn run() {
                         let _ = window.app_handle().emit("app://file-drop", strings);
                     }
                 }
-                WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
-                    // BUG FIX (ghost background playback): previously closing
-                    // the main window ALWAYS hid it to the tray whenever music
-                    // was playing or the widget was visible — so the app never
-                    // actually closed and the song kept playing invisibly.
-                    // Now: closing main QUITS and STOPS playback, unless the
-                    // user explicitly opted into "Close to tray" in Settings.
-                    let close_to_tray = window
-                        .app_handle()
-                        .try_state::<AppState>()
-                        .map(|st| {
-                            st.db
-                                .lock()
-                                .load_snapshot()
-                                .ok()
-                                .flatten()
-                                .map(|s| s.settings.close_to_tray)
-                                .unwrap_or(false)
-                        })
-                        .unwrap_or(false);
-                    if close_to_tray {
-                        api.prevent_close();
-                        let _ = window.hide();
-                    } else {
-                        if let Some(st) = window.app_handle().try_state::<AppState>() {
-                            st.player.stop();
-                        }
-                        // Exit explicitly: the (hidden) widget window still
-                        // exists, so merely closing main would leave a silent
-                        // background process running.
-                        window.app_handle().exit(0);
+                WindowEvent::CloseRequested { .. } if window.label() == "main" => {
+                    // There is no tray to hide into, so closing Vesper always
+                    // means quitting: stop the audio engine, then exit. This is
+                    // also why the old "close to tray / ghost playback" problem
+                    // cannot come back — no visible window, no process.
+                    if let Some(st) = window.app_handle().try_state::<AppState>() {
+                        st.player.stop();
                     }
+                    window.app_handle().exit(0);
                 }
                 WindowEvent::CloseRequested { api, .. } if window.label() == "widget" => {
                     // Closing the LAST visible window must quit + stop
