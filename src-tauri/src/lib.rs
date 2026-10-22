@@ -12,6 +12,7 @@ mod metadata;
 mod model;
 mod playback;
 mod smtc;
+mod stream;
 
 use std::time::Duration;
 
@@ -140,7 +141,9 @@ pub fn run() {
                 let mut cached_track: Option<model::Track> = None;
 
                 loop {
-                    std::thread::sleep(Duration::from_millis(180));
+                    // 80 ms keeps the progress bar smooth and shrinks the silence gap
+                    // between tracks (this loop is what starts the next one).
+                    std::thread::sleep(Duration::from_millis(80));
                     let Some(state) = handle.try_state::<AppState>() else {
                         continue;
                     };
