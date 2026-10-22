@@ -93,7 +93,9 @@ const defaultSettings: Settings = {
   showSampleCollection: false,
   artworkSize: 320,
   theme: "light",
-  closeToTray: true,
+  // Closing the main window must quit + stop playback by default.
+  // "Close to tray" is an explicit opt-in in Settings only.
+  closeToTray: false,
 };
 
 const defaultWidget: WidgetSettings = {
@@ -952,6 +954,21 @@ export function setWidget(patch: Partial<WidgetSettings>) {
       void (patch.visible ? native.widgetShow() : native.widgetHide()).catch(() => undefined);
     }
   }
+}
+
+/**
+ * The widget's ✕ button. In the native app this asks Rust to decide:
+ * main window still open → hide the widget; main window already closed →
+ * the widget is the last visible window, so Vesper quits and playback
+ * stops (never leave ghost audio playing in the background).
+ */
+export function closeWidget() {
+  if (state.backend === "native") {
+    setState({ widget: { ...state.widget, visible: false } });
+    void native.widgetClose().catch(() => undefined);
+    return;
+  }
+  setWidget({ visible: false });
 }
 
 export function toggleFavorite(trackId: string) {
