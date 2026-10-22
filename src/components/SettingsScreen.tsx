@@ -323,7 +323,9 @@ export function SettingsScreen() {
             One of the most lightweight desktop music players you can install: a small native Rust
             core that plays your local files directly, with a real 10-band equalizer, permanent custom
             covers, synced lyrics and a floating desktop widget. Your library never leaves your machine
-            — no accounts, no telemetry, no cloud sync. Completely open source.
+            — no accounts, no telemetry, no cloud sync, and it makes <span className="text-ink">zero network
+            requests</span>: the fonts ship inside the app, so once Vesper is installed it plays with the
+            internet cable unplugged. Completely open source.
           </p>
 
           <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 text-[12px] sm:grid-cols-[132px_minmax(0,1fr)]">
