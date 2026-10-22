@@ -6,7 +6,7 @@
 //!  • A dedicated background audio worker thread owns the `OutputStream` and `Sink`,
 //!    receiving `AudioCommand`s over an `mpsc` channel and updating `SharedState`
 //!    (`Arc<Mutex<...>>`) for lock-free inspection from any Tauri window, the System
-//!    Tray, or Windows SMTC media transport controls.
+//!    or Windows SMTC media transport controls.
 //!  • If no audio device is connected when Vesper starts, startup still succeeds and
 //!    the worker automatically attempts to open the default output stream when playback
 //!    is requested later.
