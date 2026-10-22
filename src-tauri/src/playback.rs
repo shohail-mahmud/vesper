@@ -11,7 +11,6 @@
 //!    the worker automatically attempts to open the default output stream when playback
 //!    is requested later.
 
-use std::io::BufReader;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
@@ -19,9 +18,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
+use rodio::{OutputStream, OutputStreamHandle, Sink, Source};
 
 use crate::eq::{EqSource, SharedEqBank};
+use crate::stream::StreamingSource;
 use crate::model::{EqSettings, PlaybackStateEvent, PlaybackStatus, RepeatMode};
 
 #[derive(Debug, Clone)]
@@ -222,37 +222,36 @@ impl WorkerState {
             }
         };
 
-        let file = match std::fs::File::open(path) {
-            Ok(f) => f,
+        // Decoding happens on its own thread (see `stream.rs`); the audio callback
+        // only pops samples from a ring buffer. This is what removes the random
+        // crackle/stutter caused by disk reads and symphonia decoding running
+        // inside the realtime callback.
+        let mut streamed = match StreamingSource::open(path.to_path_buf()) {
+            Ok(s) => s,
             Err(err) => {
                 let mut st = self.shared.lock();
                 st.status = PlaybackStatus::Error;
                 st.track_id = Some(item.id.clone());
                 st.index = index as i64;
-                st.error = Some(format!("Could not open audio file: {err}"));
+                st.error = Some(err);
                 return;
             }
         };
 
-        let decoded = match Decoder::new(BufReader::new(file)) {
-            Ok(d) => d,
-            Err(err) => {
-                let mut st = self.shared.lock();
-                st.status = PlaybackStatus::Error;
-                st.track_id = Some(item.id.clone());
-                st.index = index as i64;
-                st.error = Some(format!("Unsupported or corrupt audio stream: {err}"));
-                return;
-            }
-        };
+        if start_pos > 0.05 {
+            let _ = streamed.try_seek(std::time::Duration::from_secs_f64(start_pos));
+        }
+        // Wait briefly for the first fraction of a second so playback starts clean
+        // instead of with a burst of silence while the decoder warms up.
+        streamed.prefill(0.30, std::time::Duration::from_millis(200));
 
-        let probed_duration = decoded
+        let probed_duration = streamed
             .total_duration()
             .map(|d| d.as_secs_f64())
             .filter(|&d| d > 0.0)
             .unwrap_or(item.duration);
 
-        let filtered = EqSource::new(decoded.convert_samples::<f32>(), eq_bank);
+        let filtered = EqSource::new(streamed, eq_bank);
 
         let sink = match Sink::try_new(&handle) {
             Ok(s) => s,
@@ -269,9 +268,6 @@ impl WorkerState {
         sink.set_volume(volume);
         sink.set_speed(speed);
         sink.append(filtered);
-        if start_pos > 0.05 {
-            let _ = sink.try_seek(Duration::from_secs_f64(start_pos));
-        }
         if autoplay {
             sink.play();
         } else {
