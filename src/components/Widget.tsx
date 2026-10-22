@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { formatTime } from "../lib/format";
 import {
+  closeWidget,
   next,
   openMainWindow,
   previous,
@@ -139,9 +140,9 @@ export function Widget({ mode }: WidgetProps) {
 
                 <button
                   type="button"
-                  onClick={() => setWidget({ visible: false })}
-                  title="Hide desktop widget"
-                  aria-label="Hide desktop widget"
+                  onClick={() => closeWidget()}
+                  title="Close widget (quits Vesper & stops music if the main window is closed)"
+                  aria-label="Close widget"
                   className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-[7px] text-white/60 transition-colors hover:bg-white/12 hover:text-white"
                 >
                   <I.X size={12} />
