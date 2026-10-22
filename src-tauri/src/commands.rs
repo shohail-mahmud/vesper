@@ -674,8 +674,32 @@ pub fn main_window_show(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn app_quit(app: AppHandle) -> Result<(), String> {
+pub fn app_quit(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    // Always stop the audio engine before exiting so playback can never
+    // keep going in the background after Vesper is closed.
+    state.player.stop();
     app.exit(0);
+    Ok(())
+}
+
+/// The widget's ✕ button. If the main window is still open this simply
+/// hides the widget; if the main window is already closed/hidden, the
+/// widget is the last visible window — so closing it QUITS Vesper and
+/// stops playback instead of leaving ghost audio playing invisibly.
+#[tauri::command]
+pub fn widget_close(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let main_visible = app
+        .get_webview_window("main")
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false);
+    if main_visible {
+        if let Some(window) = app.get_webview_window("widget") {
+            let _ = window.hide();
+        }
+    } else {
+        state.player.stop();
+        app.exit(0);
+    }
     Ok(())
 }
 
