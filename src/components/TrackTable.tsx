@@ -1,8 +1,11 @@
 import { useState } from "react";
 import type { Track } from "../types";
 import { formatTime } from "../lib/format";
+import { selectors } from "../state/store";
 import {
   addTrackToPlaylist,
+  chooseTrackCover,
+  clearTrackCover,
   createPlaylist,
   enqueueTrack,
   revealInExplorer,
@@ -62,7 +65,7 @@ export function TrackTable({
         <span className="flex-1">Title</span>
         {showAlbum && <span className="hidden w-48 lg:block">Album</span>}
         <span className="w-14 text-right">Time</span>
-        <span className="w-24 text-right">Actions</span>
+        <span className="w-28 text-right">Actions</span>
       </div>
 
       <ul role="list">
@@ -70,27 +73,51 @@ export function TrackTable({
           const active = track.id === currentId;
           const isPlaying = active && playback.status === "playing";
           const openMenu = menuTrackId === track.id;
+          const art = selectors.artworkFor(track);
 
           return (
             <li
               key={`${track.id}-${index}`}
-              className={`group relative border-b border-rule-soft transition-colors duration-100 hover:bg-[var(--surface-hover)] ${
-                active ? "bg-[var(--surface-hover)]/65" : ""
+              className={`group relative rounded-[10px] border-b border-rule-soft px-1 transition-colors duration-100 hover:bg-[var(--surface-hover)] ${
+                active ? "bg-[var(--surface-hover)]/70" : ""
               }`}
             >
-              <div className="flex items-center gap-4 py-2.5">
+              <div className="flex items-center gap-3.5 py-2">
                 <button
                   type="button"
-                  className="w-8 shrink-0 cursor-pointer text-right"
+                  className="w-7 shrink-0 cursor-pointer text-right"
                   onClick={() => onPlay(index, track)}
                   title={`Play ${track.title}`}
                   aria-label={`Play ${track.title}`}
                 >
-                  <span className="tnum inline-flex justify-end text-[12px] text-ink-3 group-hover:hidden">
+                  <span className="tnum inline-flex justify-end text-[12px] font-medium text-ink-3 group-hover:hidden">
                     {active ? <PlayingBadge playing={isPlaying} /> : String(index + startIndex).padStart(2, "0")}
                   </span>
                   <span className="hidden justify-end text-ink group-hover:inline-flex">
                     <I.Play size={13} />
+                  </span>
+                </button>
+
+                {/* Cover thumbnail — click to set/change song cover directly */}
+                <button
+                  type="button"
+                  onClick={() => void chooseTrackCover(track.id)}
+                  title={art ? "Change song cover image" : "Add song cover image"}
+                  aria-label={`Set cover image for ${track.title}`}
+                  className="group/art relative flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-[10px] border border-rule bg-paper text-ink-3"
+                >
+                  {art ? (
+                    <img
+                      src={art}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      draggable={false}
+                    />
+                  ) : (
+                    <I.NoteSingle size={16} />
+                  )}
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-white opacity-0 transition-opacity group-hover/art:opacity-100">
+                    <I.ImagePlus size={13} />
                   </span>
                 </button>
 
@@ -100,7 +127,7 @@ export function TrackTable({
                   onClick={() => onPlay(index, track)}
                   title={track.title}
                 >
-                  <div className={`truncate-1 text-[13.5px] leading-tight ${active ? "font-semibold text-ink" : "text-ink"}`}>
+                  <div className={`truncate-1 text-[13.5px] leading-tight ${active ? "font-semibold text-ink" : "font-medium text-ink"}`}>
                     {track.title}
                   </div>
                   <div className="truncate-1 mt-0.5 text-[11.5px] leading-tight text-ink-2">
@@ -119,11 +146,11 @@ export function TrackTable({
                   </div>
                 )}
 
-                <div className="tnum w-14 text-right text-[12px] text-ink-2">
+                <div className="tnum w-14 text-right text-[12px] font-medium text-ink-2">
                   {formatTime(track.duration)}
                 </div>
 
-                <div className="relative flex w-24 items-center justify-end gap-0.5">
+                <div className="relative flex w-28 items-center justify-end gap-0.5">
                   <button
                     type="button"
                     onClick={() => toggleFavorite(track.id)}
@@ -142,7 +169,7 @@ export function TrackTable({
                     type="button"
                     onClick={() => setMenuTrackId(openMenu ? null : track.id)}
                     aria-label={`More actions for ${track.title}`}
-                    title="Queue & Playlist actions"
+                    title="Cover, Queue & Playlist actions"
                     className="icon-btn h-7 w-7 opacity-0 group-hover:opacity-100 focus:opacity-100"
                   >
                     <I.More size={14} />
@@ -164,8 +191,36 @@ export function TrackTable({
                     <div
                       role="menu"
                       onMouseLeave={() => setMenuTrackId(null)}
-                      className="rise absolute top-8 right-0 z-30 w-56 rounded-[6px] border-[1.5px] border-[var(--tile-outline)] bg-paper-2 p-1.5 text-left shadow-[0_14px_34px_rgba(0,0,0,0.16)]"
+                      className="rise absolute top-8 right-0 z-30 w-56 rounded-[12px] border-[1.5px] border-[var(--tile-outline)] bg-paper-2 p-1.5 text-left shadow-[0_14px_34px_rgba(0,0,0,0.16)]"
                     >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuTrackId(null);
+                          void chooseTrackCover(track.id);
+                        }}
+                        className="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-[12px] font-medium text-ink hover:bg-[var(--surface-hover)]"
+                      >
+                        <I.ImagePlus size={14} /> {art ? "Change Cover" : "Add Cover"}
+                      </button>
+
+                      {art && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setMenuTrackId(null);
+                            void clearTrackCover(track.id);
+                          }}
+                          className="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-[12px] font-medium text-[#C53949] hover:bg-[var(--surface-hover)]"
+                        >
+                          <I.ImageOff size={14} /> Remove Cover
+                        </button>
+                      )}
+
+                      <div className="my-1 h-[1px] bg-rule" />
+
                       <button
                         type="button"
                         role="menuitem"
@@ -173,7 +228,7 @@ export function TrackTable({
                           void enqueueTrack(track, true);
                           setMenuTrackId(null);
                         }}
-                        className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[12px] text-ink hover:bg-[var(--surface-hover)]"
+                        className="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-[12px] text-ink hover:bg-[var(--surface-hover)]"
                       >
                         <I.Play size={13} /> Play Next
                       </button>
@@ -184,7 +239,7 @@ export function TrackTable({
                           void enqueueTrack(track, false);
                           setMenuTrackId(null);
                         }}
-                        className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[12px] text-ink hover:bg-[var(--surface-hover)]"
+                        className="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-[12px] text-ink hover:bg-[var(--surface-hover)]"
                       >
                         <I.ListPlus size={14} /> Add to Queue
                       </button>
@@ -196,14 +251,14 @@ export function TrackTable({
                             void revealInExplorer(track.path);
                             setMenuTrackId(null);
                           }}
-                          className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-[12px] text-ink hover:bg-[var(--surface-hover)]"
+                          className="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-[12px] text-ink hover:bg-[var(--surface-hover)]"
                         >
                           <I.ExternalLink size={13} /> Show in Explorer
                         </button>
                       )}
 
                       <div className="my-1 h-[1px] bg-rule" />
-                      <div className="px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-ink-3">
+                      <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink-3">
                         Add to playlist
                       </div>
                       {library.playlists.map((pl) => (
@@ -215,7 +270,7 @@ export function TrackTable({
                             addTrackToPlaylist(pl.id, track.id);
                             setMenuTrackId(null);
                           }}
-                          className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-[12px] text-ink hover:bg-[var(--surface-hover)]"
+                          className="flex w-full cursor-pointer items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[12px] text-ink hover:bg-[var(--surface-hover)]"
                         >
                           <I.Plus size={12} /> <span className="truncate-1">{pl.name}</span>
                         </button>
@@ -235,9 +290,9 @@ export function TrackTable({
                           value={newPlTitle}
                           onChange={(e) => setNewPlTitle(e.target.value)}
                           placeholder="New playlist…"
-                          className="min-w-0 flex-1 rounded border border-rule bg-paper px-2 py-1 text-[11.5px] text-ink outline-none"
+                          className="min-w-0 flex-1 rounded-[8px] border border-rule bg-paper px-2 py-1 text-[11.5px] text-ink outline-none"
                         />
-                        <button type="submit" className="btn btn-primary py-1 px-2 text-[11px]">
+                        <button type="submit" className="btn btn-primary py-1 px-2.5 text-[11px]">
                           Add
                         </button>
                       </form>
