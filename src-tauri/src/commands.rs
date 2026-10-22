@@ -800,6 +800,22 @@ pub fn open_external(url: String) -> Result<(), String> {
     tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
+/// Reveal Vesper's own data folder (`%LOCALAPPDATA%\Vesper`) in Explorer and
+/// return the path so the UI can show it. This is where `library.db` and the
+/// cached `artwork` folder live — deliberately *outside* the installer so an
+/// update or reinstall never loses your library, and uninstalling never
+/// silently deletes your music metadata.
+#[tauri::command]
+pub fn open_data_folder(state: State<'_, AppState>) -> Result<String, String> {
+    let dir = state.db.lock().data_dir.clone();
+    let path = dir.to_string_lossy().to_string();
+    if !dir.exists() {
+        return Err(format!("Data folder not created yet: {path}"));
+    }
+    library::open_in_explorer(&path).map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
 #[tauri::command]
 pub fn open_path(path: String) -> Result<(), String> {
     let target = PathBuf::from(&path);
