@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { formatTime } from "../lib/format";
 import {
   closeWidget,
@@ -61,7 +62,14 @@ export function Widget({ mode }: WidgetProps) {
       {/* Clean modern rounded card (rounded-[20px]) — zero rectangular shadow bleed in window mode */}
       <div
         data-tauri-drag-region
-        style={{ opacity: mode === "preview" ? 1 : widget.opacity }}
+        // Glass opacity only tints the smoked-glass background (see .widget-pill
+        // in index.css) — never the whole card, so text stays fully readable.
+        style={
+          {
+            "--glass-a1": String(Math.min(1, Math.max(0.35, widget.opacity))),
+            "--glass-a2": String(Math.min(1, Math.max(0.3, widget.opacity * 0.92))),
+          } as CSSProperties
+        }
         className={`widget-pill relative flex w-full items-center select-none text-[#F4F4F6] ${
           mode !== "window" ? "widget-pill-preview" : ""
         } ${compact ? "h-[92px] gap-3 p-3" : "h-[104px] gap-3.5 p-3.5"}`}
