@@ -50,23 +50,42 @@
     "security": {
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": [
+          "**"
+        ]
       },
       "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://ipc.localhost; img-src 'self' asset: http://asset.localhost https://asset.localhost data: blob:; media-src 'self' asset: http://asset.localhost https://asset.localhost blob: data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; script-src 'self'"
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["msi", "nsis"],
+    "targets": [
+      "msi",
+      "nsis"
+    ],
     "publisher": "Shohail Mahmud",
-    "copyright": "© 2026 Shohail Mahmud. All rights reserved.",
+    "copyright": "\u00a9 2026 Shohail Mahmud. All rights reserved.",
     "shortDescription": "Minimalist local music player for Windows with custom covers, native EQ, synced lyrics, and round desktop widget.",
     "longDescription": "Vesper plays the music files already on your machine. Add permanent custom cover art to any song, import folders or tracks, control playback with hardware media keys, 10-band native equalizer, synced lyrics, system tray, and a sleek round floating desktop widget.",
     "category": "Music",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png", "icons/icon.ico"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
     "fileAssociations": [
       {
-        "ext": ["mp3", "flac", "wav", "m4a", "aac", "ogg", "opus"],
+        "ext": [
+          "mp3",
+          "flac",
+          "wav",
+          "m4a",
+          "aac",
+          "ogg",
+          "opus"
+        ],
         "mimeType": "audio/*",
         "description": "Audio Track"
       }
@@ -74,7 +93,10 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["English"]
+        "languages": [
+          "English"
+        ],
+        "installerHooks": "./windows/hooks.nsh"
       },
       "wix": {
         "language": "en-US"
