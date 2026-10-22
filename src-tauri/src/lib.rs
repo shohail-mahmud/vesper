@@ -1,4 +1,4 @@
-//! Application lifecycle, System Tray, Windows SMTC sync, Drag & Drop, and CLI file open.
+//! Application lifecycle, System Tray, Windows DWM & SMTC sync, Drag & Drop, and CLI file open.
 
 mod commands;
 mod db;
@@ -17,6 +17,66 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{DragDropEvent, Emitter, Manager, WindowEvent};
 
 use commands::AppState;
+
+/// Configure Windows 11 DWM attributes:
+///  • `main`: smooth native OS rounded window corners (`DWMWCP_ROUND = 2`).
+///  • `widget`: remove DWM 1px rectangular border (`DWMWA_COLOR_NONE = 0xFFFFFFFE`)
+///    so ONLY the pure round capsule floats cleanly over the desktop wallpaper!
+#[cfg(target_os = "windows")]
+fn configure_windows_dwm(app: &tauri::AppHandle) {
+    use std::ffi::c_void;
+
+    #[link(name = "dwmapi")]
+    extern "system" {
+        fn DwmSetWindowAttribute(
+            hwnd: *mut c_void,
+            dwAttribute: u32,
+            pvAttribute: *const c_void,
+            cbAttribute: u32,
+        ) -> i32;
+    }
+
+    const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
+    const DWMWA_BORDER_COLOR: u32 = 34;
+    const DWMWCP_DONOTROUND: u32 = 1;
+    const DWMWCP_ROUND: u32 = 2;
+    const DWMWA_COLOR_NONE: u32 = 0xFFFF_FFFE;
+
+    if let Some(main_win) = app.get_webview_window("main") {
+        if let Ok(hwnd) = main_win.hwnd() {
+            unsafe {
+                let _ = DwmSetWindowAttribute(
+                    hwnd.0 as *mut c_void,
+                    DWMWA_WINDOW_CORNER_PREFERENCE,
+                    (&DWMWCP_ROUND as *const u32).cast(),
+                    4,
+                );
+            }
+        }
+    }
+
+    if let Some(widget_win) = app.get_webview_window("widget") {
+        if let Ok(hwnd) = widget_win.hwnd() {
+            unsafe {
+                let _ = DwmSetWindowAttribute(
+                    hwnd.0 as *mut c_void,
+                    DWMWA_BORDER_COLOR,
+                    (&DWMWA_COLOR_NONE as *const u32).cast(),
+                    4,
+                );
+                let _ = DwmSetWindowAttribute(
+                    hwnd.0 as *mut c_void,
+                    DWMWA_WINDOW_CORNER_PREFERENCE,
+                    (&DWMWCP_DONOTROUND as *const u32).cast(),
+                    4,
+                );
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn configure_windows_dwm(_app: &tauri::AppHandle) {}
 
 fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let open_item = MenuItemBuilder::with_id("open", "Open Vesper Library").build(app)?;
@@ -103,6 +163,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            configure_windows_dwm(app.handle());
+
             let database = db::Database::open()?;
             let snapshot = database.load_snapshot().ok().flatten();
 
@@ -137,7 +199,6 @@ pub fn run() {
                 eprintln!("[vesper] system tray unavailable: {err}");
             }
 
-            // Handle CLI audio files ("Open With -> Vesper")
             let cli_files: Vec<String> = std::env::args()
                 .skip(1)
                 .filter(|arg| !arg.starts_with('-'))
@@ -154,7 +215,6 @@ pub fn run() {
                 });
             }
 
-            // State + SMTC broadcaster (~5 Hz when state changes; idle when nothing changes).
             let handle = app.handle().clone();
             std::thread::spawn(move || {
                 let mut last_payload = String::new();
@@ -211,7 +271,6 @@ pub fn run() {
                     }
                 }
                 WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
-                    // Keep music alive in background tray / desktop widget when close_to_tray or playing
                     let should_hide = window
                         .app_handle()
                         .try_state::<AppState>()
@@ -249,6 +308,9 @@ pub fn run() {
             commands::snapshot_save,
             commands::pick_folder,
             commands::pick_tracks,
+            commands::pick_cover_image,
+            commands::set_track_cover,
+            commands::remove_track_cover,
             commands::import_folder,
             commands::import_tracks,
             commands::import_dropped_paths,
