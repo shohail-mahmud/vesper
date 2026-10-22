@@ -11,6 +11,13 @@ on:
 permissions:
   contents: write
 
+# Rapid consecutive pushes were queuing parallel Windows builds that all published
+# to the SAME release tag. Whichever finished last won, so an older run could
+# re-upload assets a newer run had just removed. One build at a time per branch.
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-windows:
     name: Build Windows Installer (MSI + NSIS)
@@ -58,6 +65,30 @@ jobs:
           Write-Host "Vesper version: $version"
           "version=$version" >> $env:GITHUB_OUTPUT
 
+      - name: Offline guarantee check
+        shell: pwsh
+        run: |
+          # Vesper must work with no internet. Fail the build if the frontend ever
+          # regains a remote dependency (webfont CDN, remote script/style, fetch...).
+          npm run build | Out-Null
+          $problems = @()
+
+          if (Select-String -Path "dist/index.html" -Pattern 'https?://' -AllMatches) {
+            $problems += "dist/index.html references a remote URL"
+          }
+          if (Select-String -Path "dist/assets/*.css" -Pattern 'url\(\s*.?https?://' -AllMatches) {
+            $problems += "bundled CSS loads a remote file (webfont/CDN?)"
+          }
+          if (Select-String -Path "src/**/*.ts","src/**/*.tsx" -Pattern 'fetch\(|XMLHttpRequest|new WebSocket|sendBeacon' -AllMatches) {
+            $problems += "frontend contains a network call"
+          }
+
+          if ($problems.Count -gt 0) {
+            $problems | ForEach-Object { Write-Host "::error::$_" }
+            exit 1
+          }
+          Write-Host "Offline check passed: no remote URLs, no network calls in the frontend."
+
       - name: Build Windows Tauri application (MSI + NSIS + EXE)
         run: npx tauri build
 
@@ -71,6 +102,18 @@ jobs:
           Write-Host "Built MSI: $($msi.FullName)"
           Write-Host "Built NSIS: $($nsis.FullName)"
 
+          # The installer must stay small on purpose: it downloads the WebView2 runtime
+          # during install instead of embedding it (+127 MB). Guard that decision.
+          $limitMB = 40
+          foreach ($f in @($msi, $nsis)) {
+            $mb = [math]::Round($f.Length / 1MB, 2)
+            Write-Host "$($f.Name): $mb MB"
+            if ($mb -gt $limitMB) {
+              Write-Host "::error::$($f.Name) is $mb MB - installer must stay under $limitMB MB (webviewInstallMode likely set to offlineInstaller)"
+              exit 1
+            }
+          }
+
       - name: Upload Windows build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -80,6 +123,28 @@ jobs:
             src-tauri/target/release/vesper.exe
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*-setup.exe
+
+      - name: Remove obsolete release assets
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $repo = "${{ github.repository }}"
+          $tag = "${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', steps.appver.outputs.version) }}"
+          # softprops/action-gh-release only ADDS assets; it never deletes stale ones.
+          # Without this, an old `vesper.exe` (portable, no installer) sticks around
+          # forever and people keep downloading it.
+          $releaseId = gh api "repos/$repo/releases/tags/$tag" --jq '.id' 2>$null
+          if (-not $releaseId) { Write-Host "No release $tag yet"; exit 0 }
+          $stale = @('vesper.exe')
+          foreach ($name in $stale) {
+            $assetId = gh api "repos/$repo/releases/$releaseId/assets" --jq ".[] | select(.name=='$name') | .id" 2>$null
+            if ($assetId) {
+              gh api -X DELETE "repos/$repo/releases/assets/$assetId"
+              Write-Host "Removed stale asset $name from $tag"
+            }
+          }
 
       - name: Publish GitHub Release
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
