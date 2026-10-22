@@ -1,5 +1,7 @@
 import {
   addTrackToPlaylist,
+  chooseTrackCover,
+  clearTrackCover,
   createPlaylist,
   enqueueTrack,
   revealInExplorer,
@@ -10,6 +12,8 @@ import { runtime } from "../state/bridge";
 
 export {
   addTrackToPlaylist,
+  chooseTrackCover,
+  clearTrackCover,
   createPlaylist,
   enqueueTrack,
   revealInExplorer,
