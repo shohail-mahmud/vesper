@@ -161,7 +161,6 @@ pub struct Settings {
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default = "default_true")]
-    pub close_to_tray: bool,
 }
 
 impl Default for Settings {
@@ -174,7 +173,6 @@ impl Default for Settings {
             show_sample_collection: false,
             artwork_size: 320,
             theme: "light".into(),
-            close_to_tray: false,
         }
     }
 }
