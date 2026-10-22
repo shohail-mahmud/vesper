@@ -370,6 +370,8 @@ pub fn run() {
             commands::widget_close,
             commands::widget_set_always_on_top,
             commands::widget_set_bounds,
+            commands::factory_reset,
+            commands::open_external,
             commands::open_path,
         ])
         .run(tauri::generate_context!())
