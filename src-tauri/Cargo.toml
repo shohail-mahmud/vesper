@@ -1,0 +1,51 @@
+[package]
+name = "vesper"
+version = "0.2.0"
+description = "Vesper — a lightweight local music player for Windows"
+authors = ["Shohail Mahmud"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "vesper_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset", "tray-icon", "image-png"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Persistent local library (bundled SQLite — no external service, no network).
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Audio playback + multi-format decoding (MP3, WAV, FLAC, M4A/AAC, ALAC, OGG, AIFF).
+rodio = { version = "0.20", features = ["symphonia-all"] }
+
+# Metadata, embedded lyrics & embedded artwork extraction.
+lofty = "0.21"
+
+walkdir = "2"
+sha2 = "0.10"
+hex = "0.4"
+anyhow = "1"
+thiserror = "1"
+parking_lot = "0.12"
+dirs = "5"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+souvlaki = "0.7"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
+
+[profile.release.package."*"]
+opt-level = "s"
