@@ -119,6 +119,7 @@ export interface NativeApi {
   appQuit(): Promise<void>;
   widgetShow(): Promise<void>;
   widgetHide(): Promise<void>;
+  widgetClose(): Promise<void>;
   widgetSetAlwaysOnTop(value: boolean): Promise<void>;
   widgetSetBounds(settings: WidgetSettings): Promise<void>;
   openPath(path: string): Promise<void>;
@@ -166,6 +167,7 @@ export const native: NativeApi = {
   appQuit: () => nativeInvoke("app_quit"),
   widgetShow: () => nativeInvoke("widget_show"),
   widgetHide: () => nativeInvoke("widget_hide"),
+  widgetClose: () => nativeInvoke("widget_close"),
   widgetSetAlwaysOnTop: (value) => nativeInvoke("widget_set_always_on_top", { value }),
   widgetSetBounds: (settings) => nativeInvoke("widget_set_bounds", { settings }),
   openPath: (path) => nativeInvoke("open_path", { path }),
