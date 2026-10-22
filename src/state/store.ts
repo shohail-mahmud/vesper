@@ -93,9 +93,6 @@ const defaultSettings: Settings = {
   showSampleCollection: false,
   artworkSize: 320,
   theme: "light",
-  // Closing the main window must quit + stop playback by default.
-  // "Close to tray" is an explicit opt-in in Settings only.
-  closeToTray: false,
 };
 
 const defaultWidget: WidgetSettings = {
