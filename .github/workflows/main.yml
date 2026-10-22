@@ -37,7 +37,7 @@ jobs:
           workspaces: "./src-tauri -> target"
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Type-check & run unit tests
         run: |
@@ -49,6 +49,14 @@ jobs:
 
       - name: Run Rust backend unit tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Read app version
+        id: appver
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          Write-Host "Vesper version: $version"
+          "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Build Windows Tauri application (MSI + NSIS + EXE)
         run: npx tauri build
@@ -77,8 +85,11 @@ jobs:
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.2.0' }}
-          name: Vesper ${{ github.ref_type == 'tag' && github.ref_name || 'v0.2.0' }} (Windows 64-bit)
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', steps.appver.outputs.version) }}
+          name: Vesper ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', steps.appver.outputs.version) }} (Windows 64-bit)
+          make_latest: true
+          draft: false
+          prerelease: false
           generate_release_notes: true
           files: |
             src-tauri/target/release/vesper.exe
