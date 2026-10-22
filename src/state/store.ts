@@ -942,7 +942,17 @@ export function setWidget(patch: Partial<WidgetSettings>) {
   setState({ widget });
   if (state.backend === "native") {
     if ("alwaysOnTop" in patch) void native.widgetSetAlwaysOnTop(widget.alwaysOnTop).catch(() => undefined);
+    // BUG FIX (dead "Widget size" + dead "Glass opacity"): these options only
+    // mutated React state before, so the real native widget window was never
+    // resized and never received the new opacity. Any appearance/size change now
+    // goes through `widget_set_bounds`, which resizes the HWND, persists the
+    // settings in Rust and broadcasts them to the widget webview live.
     if (
+      "size" in patch ||
+      "opacity" in patch ||
+      "showArtwork" in patch ||
+      "showProgress" in patch ||
+      "showVolume" in patch ||
       patch.x !== undefined ||
       patch.y !== undefined ||
       patch.width !== undefined ||
@@ -969,6 +979,58 @@ export function closeWidget() {
     return;
   }
   setWidget({ visible: false });
+}
+
+/**
+ * Clean Data — full factory reset.
+ *
+ * Native: stops playback, wipes library/playlists/custom covers/EQ/preferences
+ * (SQLite rows) and the cached artwork folder inside Rust, then relaunches
+ * Vesper so it boots completely fresh. The user's actual music files on disk
+ * are NEVER touched — only Vesper's own database and thumbnail cache.
+ *
+ * Browser preview: pauses WebAudio, clears localStorage and reloads.
+ */
+export async function factoryReset(): Promise<void> {
+  if (state.backend === "native") {
+    // Block every pending (and pagehide/beforeunload) snapshot write first:
+    // otherwise this window would re-save the very library Rust is erasing
+    // while the process restarts.
+    suppressPersist = true;
+    if (snapshotTimer !== null) {
+      window.clearTimeout(snapshotTimer);
+      snapshotTimer = null;
+    }
+    try {
+      await native.factoryReset();
+    } catch (err) {
+      suppressPersist = false;
+      toast("error", "Clean data failed", err instanceof Error ? err.message : String(err));
+    }
+    return;
+  }
+  try {
+    audioEl?.pause();
+  } catch {
+    /* no element yet */
+  }
+  setState({ playback: { ...state.playback, status: "idle", trackId: null, position: 0 } }, true);
+  channelSync?.close();
+  try {
+    localStorage.removeItem("vesper.snapshot.v2");
+  } catch {
+    /* private mode */
+  }
+  window.location.reload();
+}
+
+/** Open a URL in the user's default browser (About → source code). */
+export function openExternalUrl(url: string): void {
+  if (state.backend === "native") {
+    void native.openExternal(url).catch(() => undefined);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 export function toggleFavorite(trackId: string) {
@@ -1642,6 +1704,13 @@ export async function init(widgetWindow = false) {
     });
     void events.libraryChanged(() => {
       void syncNativeSnapshot();
+    });
+    // Live widget appearance sync: Settings lives in the main window, the
+    // widget is a separate OS window/webview. Rust re-broadcasts every
+    // widget_set_bounds call so opacity, size and the visibility of the
+    // artwork/progress/volume rows update instantly in the real widget.
+    void events.widgetSettings((settings) => {
+      setState({ widget: { ...state.widget, ...settings } }, true);
     });
 
     if (!isWidgetWindow) {
