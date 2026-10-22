@@ -15,8 +15,11 @@ permissions:
 # to the SAME release tag. Whichever finished last won, so an older run could
 # re-upload assets a newer run had just removed. One build at a time per branch.
 concurrency:
-  group: windows-release-${{ github.ref }}
-  cancel-in-progress: false
+  # -v2: a stuck/zombie run in the old group would block every future run forever.
+  # Newer commit wins: a fresh run cancels whatever is still going, so nothing can
+  # sit in the queue behind a dead run again.
+  group: windows-release-v2-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-windows:
