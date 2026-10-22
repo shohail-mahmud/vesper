@@ -11,25 +11,21 @@ export interface EqSettings {
   enabled: boolean;
   preset: string;
   preamp: number;
-  /** 10 bands in dB (-12..+12): 32, 64, 125, 250, 500, 1k, 2k, 4k, 8k, 16k Hz */
   bands: number[];
 }
 
 export interface Track {
   id: string;
-  /** Display title. From ID3/Vorbis/MP4 tags when available, else the file name. */
   title: string;
-  /** From tags only (or filename Artist - Title). Never invented. */
   artist?: string;
   album?: string;
   trackNumber?: number;
-  /** Seconds. 0 means "not yet known". */
   duration: number;
-  /** Original file location, never copied into app storage. */
   path: string;
-  /** Normalised identity used for de-duplication. */
   key: string;
   artwork?: string;
+  /** True when user explicitly set a custom cover image on this song. */
+  customArtwork?: boolean;
   lyrics?: string;
   sourceKind: TrackSourceKind;
   folderId?: string;
@@ -37,21 +33,16 @@ export interface Track {
   favorite?: boolean;
   playCount?: number;
   lastPlayedAt?: number;
-  /** Set when the file can no longer be found at `path`. */
   missing?: boolean;
-  /** Media error description for the last playback attempt. */
   error?: string;
 }
 
 export interface FolderPlaylist {
   id: string;
-  /** Display name, editable by the user. The physical folder is never renamed. */
   name: string;
   path: string;
   trackIds: string[];
-  /** Nested-directory policy for this folder. */
   recursive: boolean;
-  /** The folder could not be reached on the last scan. Entry is preserved. */
   missing: boolean;
   addedAt: number;
   lastScannedAt?: number;
@@ -76,9 +67,7 @@ export interface PlaybackState {
   repeat: RepeatMode;
   speed: number;
   eq: EqSettings;
-  /** Play order currently in effect (shuffled when `shuffle` is true). */
   queue: string[];
-  /** Playlist order, restored when shuffle is switched off. */
   baseQueue: string[];
   index: number;
   deviceAvailable?: boolean;
@@ -88,7 +77,6 @@ export interface PlaybackState {
 export interface WidgetSettings {
   visible: boolean;
   alwaysOnTop: boolean;
-  /** 0.55 – 1.0 */
   opacity: number;
   size: "compact" | "expanded";
   showArtwork: boolean;
