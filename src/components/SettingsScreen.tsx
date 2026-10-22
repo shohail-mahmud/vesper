@@ -122,7 +122,7 @@ export function SettingsScreen() {
         </Row>
         <Row
           label="Minimize to Windows System Tray on close"
-          description="Closing the main window hides Vesper to the system tray so background playback and hardware media keys stay active."
+          description="Off by default: closing the main window quits Vesper and stops the music. Turn this on only if you want closing the main window to hide Vesper to the system tray and keep background playback and hardware media keys active. Note: closing the widget afterwards (when the main window is hidden) still quits Vesper and stops playback."
         >
           <Toggle
             checked={settings.closeToTray}
