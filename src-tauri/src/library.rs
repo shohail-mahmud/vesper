@@ -20,7 +20,6 @@ pub fn is_audio(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Normalised identity: back-slashes folded, case lowered, `.`/`..` collapsed.
 pub fn normalize_path(path: &str) -> String {
     let unified = path.replace('\\', "/");
     let mut parts: Vec<&str> = Vec::new();
@@ -37,7 +36,6 @@ pub fn normalize_path(path: &str) -> String {
     parts.join("/").to_lowercase()
 }
 
-/// Deterministic FNV-1a 64-bit hex ID so track IDs are stable across Rust compiler versions.
 pub fn track_id(path: &str) -> String {
     let norm = normalize_path(path);
     let mut hash: u64 = 0xcbf29ce484222325;
@@ -63,7 +61,6 @@ pub struct ScanOutcome {
     pub missing: usize,
 }
 
-/// Collect audio files under `root`, honouring the nested-directory policy.
 pub fn collect_files(root: &Path, recursive: bool) -> Vec<PathBuf> {
     let mut files = Vec::new();
     if recursive {
@@ -106,7 +103,6 @@ pub fn scan_folder(
         let path_string = file.to_string_lossy().to_string();
         let id = track_id(&path_string);
         if existing.contains(&id) {
-            // Preserve membership in folder playlist during refresh while counting duplicate
             all_track_ids.push(id);
             skipped_duplicates += 1;
             continue;
@@ -140,6 +136,7 @@ pub fn scan_folder(
             path: path_string,
             key: id,
             artwork: meta.artwork,
+            custom_artwork: false,
             lyrics: meta.lyrics,
             source_kind: if folder_id.is_some() {
                 "folder".into()
