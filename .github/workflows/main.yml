@@ -83,6 +83,20 @@ jobs:
             $problems += "frontend contains a network call"
           }
 
+          # The webfonts are meant to ship inside the app. If they are referenced but
+          # absent, the UI silently falls back to system fonts - fail loudly instead.
+          # Webfonts must actually reach the build: every /fonts/... URL in the bundled
+          # CSS has to resolve to a real file (or be inlined as a data: URI).
+          $cssText = (Get-Content "dist/assets/*.css" -Raw) -join "`n"
+          if (([regex]::Matches($cssText, '@font-face')).Count -lt 1) {
+            $problems += "no @font-face rules reached the built CSS - webfonts are gone"
+          }
+          $refs = [regex]::Matches($cssText, 'url\(["'']?/fonts/([^")]+)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+          foreach ($r in $refs) {
+            if (-not (Test-Path "dist/fonts/$r")) { $problems += "bundled CSS needs dist/fonts/$r but it is missing" }
+          }
+          Write-Host "webfont check: $(@($refs).Count) file reference(s), $(([regex]::Matches($cssText,'data:font/woff2;base64')).Count) inlined"
+
           if ($problems.Count -gt 0) {
             $problems | ForEach-Object { Write-Host "::error::$_" }
             exit 1
@@ -125,26 +139,45 @@ jobs:
             src-tauri/target/release/bundle/nsis/*-setup.exe
 
       - name: Remove obsolete release assets
+        # Cleanup must NEVER be able to block a release: it runs before publishing,
+        # so an API hiccup here previously skipped the publish step entirely (run #78).
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        continue-on-error: true
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $repo = "${{ github.repository }}"
           $tag = "${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', steps.appver.outputs.version) }}"
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept        = "application/vnd.github+json"
+            "User-Agent"  = "vesper-release-cleanup"
+          }
           # softprops/action-gh-release only ADDS assets; it never deletes stale ones.
-          # Without this, an old `vesper.exe` (portable, no installer) sticks around
-          # forever and people keep downloading it.
-          $releaseId = gh api "repos/$repo/releases/tags/$tag" --jq '.id' 2>$null
-          if (-not $releaseId) { Write-Host "No release $tag yet"; exit 0 }
-          $stale = @('vesper.exe')
-          foreach ($name in $stale) {
-            $assetId = gh api "repos/$repo/releases/$releaseId/assets" --jq ".[] | select(.name=='$name') | .id" 2>$null
-            if ($assetId) {
-              gh api -X DELETE "repos/$repo/releases/assets/$assetId"
-              Write-Host "Removed stale asset $name from $tag"
+          # Without this, an old portable `vesper.exe` sticks around forever and people
+          # keep downloading it instead of the installer.
+          try {
+            $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/$tag" -Headers $headers -ErrorAction Stop
+          } catch {
+            Write-Host "No release $tag yet - nothing to clean."
+            exit 0
+          }
+          $deleted = 0
+          foreach ($asset in @($rel.assets)) {
+            if ($asset.name -in @('vesper.exe', 'Vesper.exe')) {
+              try {
+                Invoke-RestMethod -Method Delete -Uri "https://api.github.com/repos/$repo/releases/assets/$($asset.id)" -Headers $headers -ErrorAction Stop
+                Write-Host "Removed stale asset $($asset.name) ($([math]::Round($asset.size/1MB,2)) MB) from $tag"
+                $deleted++
+              } catch {
+                Write-Host "::warning::Could not delete $($asset.name): $($_.Exception.Message)"
+                Write-Host "::warning::Delete it by hand: gh release delete-asset $tag $($asset.name) -y"
+              }
             }
           }
+          Write-Host "Cleanup done - $deleted stale asset(s) removed."
+          exit 0
 
       - name: Publish GitHub Release
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
