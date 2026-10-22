@@ -97,7 +97,6 @@ export interface Settings {
   showSampleCollection: boolean;
   artworkSize: number;
   theme: ThemeMode;
-  closeToTray: boolean;
 }
 
 export interface LibraryState {
