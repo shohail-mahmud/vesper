@@ -174,7 +174,7 @@ impl Default for Settings {
             show_sample_collection: false,
             artwork_size: 320,
             theme: "light".into(),
-            close_to_tray: true,
+            close_to_tray: false,
         }
     }
 }
