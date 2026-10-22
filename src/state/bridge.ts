@@ -123,6 +123,8 @@ export interface NativeApi {
   widgetSetAlwaysOnTop(value: boolean): Promise<void>;
   widgetSetBounds(settings: WidgetSettings): Promise<void>;
   openPath(path: string): Promise<void>;
+  openExternal(url: string): Promise<void>;
+  factoryReset(): Promise<void>;
 }
 
 export const native: NativeApi = {
@@ -171,6 +173,8 @@ export const native: NativeApi = {
   widgetSetAlwaysOnTop: (value) => nativeInvoke("widget_set_always_on_top", { value }),
   widgetSetBounds: (settings) => nativeInvoke("widget_set_bounds", { settings }),
   openPath: (path) => nativeInvoke("open_path", { path }),
+  openExternal: (url) => nativeInvoke("open_external", { url }),
+  factoryReset: () => nativeInvoke("factory_reset"),
 };
 
 export const events = {
@@ -179,6 +183,9 @@ export const events = {
   libraryChanged: (cb: () => void): Promise<Unlisten> => nativeListen("library://changed", cb),
   fileDrop: (cb: (paths: string[]) => void): Promise<Unlisten> => nativeListen("app://file-drop", cb),
   openFiles: (cb: (paths: string[]) => void): Promise<Unlisten> => nativeListen("app://open-files", cb),
+  /** Rust re-broadcasts widget appearance changes so every window stays in sync. */
+  widgetSettings: (cb: (settings: WidgetSettings) => void): Promise<Unlisten> =>
+    nativeListen("widget://settings", cb),
 };
 
 const LS_SNAPSHOT = "vesper.snapshot.v2";
