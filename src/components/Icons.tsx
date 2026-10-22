@@ -68,6 +68,9 @@ export const ArrowLeft = (p: IconProps) => base(p, <><path d="M19 12H5" /><path 
 export const Panel = (p: IconProps) => base(p, <><rect x="3.2" y="5" width="17.6" height="14" rx="2.4" /><path d="M3.2 9.4h17.6" /><path d="M7.6 13.4h6" /></>);
 export const Keyboard = (p: IconProps) => base(p, <><rect x="2.6" y="6.2" width="18.8" height="11.6" rx="2" /><path d="M6.4 9.8h.01M9.6 9.8h.01M12.8 9.8h.01M16 9.8h.01M6.4 13h.01M9.6 13h.01M12.8 13h.01M16 13h.01M8 15.8h8" /></>);
 export const Sparkle = (p: IconProps) => base(p, <><path d="M12 3.4 13.9 9l5.6 1.9-5.6 1.9L12 18.4 10.1 12.8 4.5 10.9 10.1 9Z" /><path d="M18.6 3.2v3.2M20.2 4.8h-3.2" /></>);
+export const ImagePlus = (p: IconProps) => base(p, <><rect x="3.5" y="4.5" width="17" height="15" rx="2.6" /><circle cx="9" cy="10" r="1.6" /><path d="M4.2 17.6 9.6 13a1.4 1.4 0 0 1 1.9.1l3.1 2.9 2.1-1.9a1.3 1.3 0 0 1 1.8.1l1.8 1.8" /></>);
+export const ImageOff = (p: IconProps) => base(p, <><path d="M4.2 4.2 19.8 19.8" /><path d="M9.2 4.5h9.2a2.1 2.1 0 0 1 2.1 2.1v9.2" /><path d="M19.5 19.5H5.6a2.1 2.1 0 0 1-2.1-2.1V6.6c0-.5.2-1 .5-1.4" /><path d="M4.3 17.3 9.2 13a1.4 1.4 0 0 1 1.9.1l2.4 2.2" /></>);
+export const Expand = (p: IconProps) => base(p, <><path d="M14.5 4.5h5v5" /><path d="M19.5 4.5 13 11" /><path d="M9.5 19.5h-5v-5" /><path d="M4.5 19.5 11 13" /></>);
 
 export function Mark({ size = 24, tone = "currentColor", ...props }: IconProps & { tone?: string }) {
   return (
