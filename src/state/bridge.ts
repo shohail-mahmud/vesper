@@ -123,6 +123,7 @@ export interface NativeApi {
   widgetSetAlwaysOnTop(value: boolean): Promise<void>;
   widgetSetBounds(settings: WidgetSettings): Promise<void>;
   openPath(path: string): Promise<void>;
+  openDataFolder(): Promise<string>;
   openExternal(url: string): Promise<void>;
   factoryReset(): Promise<void>;
 }
@@ -173,6 +174,7 @@ export const native: NativeApi = {
   widgetSetAlwaysOnTop: (value) => nativeInvoke("widget_set_always_on_top", { value }),
   widgetSetBounds: (settings) => nativeInvoke("widget_set_bounds", { settings }),
   openPath: (path) => nativeInvoke("open_path", { path }),
+  openDataFolder: () => nativeInvoke<string>("open_data_folder"),
   openExternal: (url) => nativeInvoke("open_external", { url }),
   factoryReset: () => nativeInvoke("factory_reset"),
 };
