@@ -6,10 +6,11 @@ import {
   setSettings,
   setView,
   setWidget,
+  toast,
   useApp,
 } from "../state/store";
 import { SUPPORTED_EXTENSIONS } from "../lib/path";
-import { runtime } from "../state/bridge";
+import { native, runtime } from "../state/bridge";
 import * as I from "./Icons";
 
 /** Version comes from package.json at build time (vite.config.ts → `define`). */
@@ -219,6 +220,27 @@ export function SettingsScreen() {
         title="Clean data"
         caption="Vesper only ever stores its own library index and cover thumbnails locally."
       >
+        {runtime.isTauri && (
+          <Row
+            label="Where Vesper keeps your library"
+            description="%LOCALAPPDATA%\Vesper — the SQLite index, cached cover art and preferences. It lives outside the installer, so updating or reinstalling Vesper keeps your library, and uninstalling (MSI) leaves this folder alone. Use Clean data below to erase it."
+          >
+            <button
+              type="button"
+              className="btn btn-ghost py-1.5 text-[11.5px]"
+              onClick={() => {
+                void native
+                  .openDataFolder()
+                  .then((path) => toast("info", "Data folder", path))
+                  .catch((err: unknown) =>
+                    toast("error", "Could not open folder", err instanceof Error ? err.message : String(err)),
+                  );
+              }}
+            >
+              <I.Folder size={13} /> Open folder
+            </button>
+          </Row>
+        )}
         <Row
           label="Clean data — factory reset"
           description={`Erases Vesper's library index (${trackCount} track${trackCount === 1 ? "" : "s"}, ${folderCount} folder${folderCount === 1 ? "" : "s"}, ${playlistCount} playlist${playlistCount === 1 ? "" : "s"}), custom covers, cached artwork, equalizer settings and preferences, then restarts the app brand-new. Your music files on disk are never touched.`}
