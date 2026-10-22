@@ -91,7 +91,9 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          # Deliberately NOT publishing the bare `vesper.exe`: people downloaded it,
+          # double-clicked it and got a portable app with no entry in Apps & Features,
+          # no Start Menu shortcut and no uninstaller. Only real installers ship.
           files: |
-            src-tauri/target/release/vesper.exe
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*-setup.exe
