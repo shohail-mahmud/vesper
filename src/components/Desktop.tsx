@@ -245,13 +245,14 @@ export function Desktop({
     document.documentElement.dataset.theme = state.settings.theme;
   }, [state.settings.theme]);
 
-  // Default widget coordinates for browser preview floating mode
+  // Default widget coordinates for browser preview floating mode (clean bottom-right corner)
   useEffect(() => {
     if (!runtime.isTauri && state.widget.x === 0 && state.widget.y === 0) {
-      const height = state.widget.size === "compact" ? 98 : 188;
+      const width = state.widget.size === "compact" ? 360 : 418;
+      const height = state.widget.size === "compact" ? 96 : 112;
       setWidget({
-        x: 32,
-        y: Math.max(80, window.innerHeight - height - 96),
+        x: Math.max(24, window.innerWidth - width - 28),
+        y: Math.max(72, window.innerHeight - height - 104),
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -304,7 +305,33 @@ export function Desktop({
 
       {/* In browser preview, render the floating mini-widget directly; in native Tauri, the real 2nd OS window owns it */}
       {!runtime.isTauri && state.widget.visible && (
-        <div className="fixed z-40" style={{ left: state.widget.x, top: state.widget.y }}>
+        <div
+          className="fixed z-40 cursor-grab active:cursor-grabbing"
+          style={
+            state.widget.x > 0 || state.widget.y > 0
+              ? { left: state.widget.x, top: state.widget.y }
+              : { right: 24, bottom: 100 }
+          }
+          onPointerDown={(e) => {
+            if ((e.target as HTMLElement).closest("button,[role='slider']")) return;
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const originX = state.widget.x;
+            const originY = state.widget.y;
+            const move = (ev: PointerEvent) => {
+              setWidget({
+                x: Math.max(8, originX + (ev.clientX - startX)),
+                y: Math.max(8, originY + (ev.clientY - startY)),
+              });
+            };
+            const up = () => {
+              window.removeEventListener("pointermove", move);
+              window.removeEventListener("pointerup", up);
+            };
+            window.addEventListener("pointermove", move);
+            window.addEventListener("pointerup", up);
+          }}
+        >
           <Widget
             mode="desktop"
             onToggleSize={() =>
