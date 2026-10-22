@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.test-dist/
+.playwright-cli/
+src-tauri/target/
+src-tauri/gen/
+src-tauri/Cargo.lock
+.DS_Store
+Thumbs.db
+*.log
