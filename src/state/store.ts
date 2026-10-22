@@ -40,6 +40,7 @@ import {
   loadSnapshot,
   native,
   openStateChannel,
+  pickCoverDataUrlWeb,
   pickFolderFiles,
   pickTrackFiles,
   readDroppedItems,
@@ -98,15 +99,15 @@ const defaultSettings: Settings = {
 const defaultWidget: WidgetSettings = {
   visible: false,
   alwaysOnTop: false,
-  opacity: 0.94,
+  opacity: 0.96,
   size: "expanded",
   showArtwork: true,
   showProgress: true,
   showVolume: true,
   x: 0,
   y: 0,
-  width: 384,
-  height: 188,
+  width: 424,
+  height: 112,
   clickThrough: false,
 };
 
@@ -163,14 +164,24 @@ function notify(skipPersist = false) {
   }
 }
 
+function flushPersistNow() {
+  if (snapshotTimer !== null) {
+    window.clearTimeout(snapshotTimer);
+    snapshotTimer = null;
+  }
+  if (!suppressPersist && !isWidgetWindow) {
+    void saveSnapshot(toSnapshot(state));
+  }
+}
+
 function schedulePersist() {
   if (snapshotTimer !== null) window.clearTimeout(snapshotTimer);
   snapshotTimer = window.setTimeout(() => {
     snapshotTimer = null;
-    if (!suppressPersist) {
+    if (!suppressPersist && !isWidgetWindow) {
       void saveSnapshot(toSnapshot(state));
     }
-  }, 450);
+  }, 120);
 }
 
 export function subscribe(listener: () => void): () => void {
@@ -233,11 +244,18 @@ function applySnapshot(snapshot: AppSnapshot | null, preservePlaybackRuntime = f
     playlists: snapshot.library?.playlists ?? [],
   };
 
+  const rawWidget = { ...defaultWidget, ...(snapshot.widget ?? {}) };
+  const normalizedWidget: WidgetSettings = {
+    ...rawWidget,
+    width: rawWidget.size === "compact" ? 364 : 424,
+    height: rawWidget.size === "compact" ? 96 : 112,
+  };
+
   setState(
     {
       library,
       settings: { ...defaultSettings, ...(snapshot.settings ?? {}) },
-      widget: { ...defaultWidget, ...(snapshot.widget ?? {}) },
+      widget: normalizedWidget,
       playback: preservePlaybackRuntime
         ? state.playback
         : {
@@ -247,6 +265,9 @@ function applySnapshot(snapshot: AppSnapshot | null, preservePlaybackRuntime = f
             eq: normalizeEq(snapshot.playback?.eq),
             status: snapshot.playback?.trackId ? "paused" : "idle",
             position: snapshot.playback?.position ?? 0,
+            duration: snapshot.playback?.trackId
+              ? (library.tracks[snapshot.playback.trackId]?.duration ?? 0)
+              : 0,
             queue: [],
             baseQueue: [],
             index: -1,
@@ -296,7 +317,7 @@ function ensureWebAudioGraph(el: HTMLAudioElement) {
       const f = audioCtx!.createBiquadFilter();
       f.type = idx === 0 ? "lowshelf" : idx === 9 ? "highshelf" : "peaking";
       f.frequency.value = freq;
-      f.Q.value = 1.414;
+      f.Q.value = 0.92;
       f.gain.value = 0;
       return f;
     });
@@ -943,6 +964,73 @@ export function toggleFavorite(trackId: string) {
       tracks: { ...state.library.tracks, [trackId]: { ...track, favorite } },
     },
   });
+}
+
+/** Updates cover artwork on a song and persists immediately until explicitly removed. */
+export function setTrackCoverData(trackId: string, artwork: string | undefined, custom = true) {
+  const track = state.library.tracks[trackId];
+  if (!track) return;
+  const updated: Track = {
+    ...track,
+    artwork,
+    customArtwork: artwork ? custom : false,
+  };
+  setState(
+    {
+      library: {
+        ...state.library,
+        tracks: { ...state.library.tracks, [trackId]: updated },
+      },
+    },
+    true,
+  );
+  if (state.backend !== "native") {
+    void saveSnapshot(toSnapshot(state));
+  }
+}
+
+/** Opens the image picker and permanently saves the chosen cover for this song. */
+export async function chooseTrackCover(trackId: string): Promise<void> {
+  const track = state.library.tracks[trackId];
+  if (!track) return;
+
+  if (state.backend === "native") {
+    try {
+      const picked = await native.pickCoverImage();
+      if (!picked) return;
+      const savedPath = await native.setTrackCover(trackId, picked);
+      setTrackCoverData(trackId, savedPath, true);
+      toast("success", "Cover saved", "Saved permanently until you remove it.");
+    } catch (err) {
+      toast("error", "Could not save cover", err instanceof Error ? err.message : String(err));
+    }
+    return;
+  }
+
+  const dataUrl = await pickCoverDataUrlWeb();
+  if (!dataUrl) return;
+  setTrackCoverData(trackId, dataUrl, true);
+  toast("success", "Cover saved", "Saved until you remove it.");
+}
+
+/** Explicitly removes the saved cover image from a song. */
+export async function clearTrackCover(trackId: string): Promise<void> {
+  const track = state.library.tracks[trackId];
+  if (!track) return;
+
+  if (state.backend === "native") {
+    try {
+      await native.removeTrackCover(trackId);
+      setTrackCoverData(trackId, undefined, false);
+      toast("info", "Cover removed", track.title);
+    } catch (err) {
+      toast("error", "Could not remove cover", err instanceof Error ? err.message : String(err));
+    }
+    return;
+  }
+
+  setTrackCoverData(trackId, undefined, false);
+  toast("info", "Cover removed", track.title);
 }
 
 export function createPlaylist(name: string, initialTrackIds: string[] = []): UserPlaylist | null {
@@ -1603,10 +1691,18 @@ export async function init(widgetWindow = false) {
       if (message.command === "shuffle") setShuffle(!state.playback.shuffle);
       if (message.command === "repeat") cycleRepeat();
       if (message.command === "openMain") window.focus();
+      if (message.command === "sync") notify(true);
       if (typeof message.seek === "number") void seek(message.seek);
       if (typeof message.volume === "number") setVolume(message.volume);
     }
   });
+
+  if (isWidgetWindow) {
+    channelSync.post({ kind: "command", command: "sync" });
+  } else {
+    window.addEventListener("beforeunload", flushPersistNow);
+    window.addEventListener("pagehide", flushPersistNow);
+  }
 }
 
 export function isWidgetContext(): boolean {
