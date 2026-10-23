@@ -1,28 +1,34 @@
-//! Prefetching decode pipeline — the audio callback never touches the disk.
+//! Prefetching decode pipeline — the audio callback never touches the disk, and
+//! never waits on a lock.
 //!
-//! Why this exists:
-//! `rodio::Decoder` is polled from inside the audio output callback. That means
-//! every symphonia read, every MP3/FLAC frame decode and every cold disk hit
-//! (first play after boot, an antivirus scan grabbing the file, a slow external
-//! drive) happens on the realtime audio thread — and any hiccup there is an
-//! audible stutter or crackle. `Vec<f32>` allocation growing mid-track does the
-//! same thing.
+//! Why this exists
+//! ---------------
+//! `rodio::Decoder` is polled from inside the audio output callback, so every
+//! symphonia read, every MP3/FLAC frame decode and every cold disk hit happens on
+//! the realtime thread — each one an audible stutter or crackle.
 //!
-//! So decoding lives on its own thread here. It fills a bounded ring of `f32`
-//! samples about a second ahead of the playhead, and the callback only ever does
-//! a `try_lock` + `pop_front` (tens of nanoseconds). If the buffer is ever
-//! momentarily empty the source emits silence instead of blocking the callback,
-//! so the audio device keeps running on its own clock and playback never
-//! underruns. Seeking asks the decode thread to flush + reposition.
+//! Structure (the same shape VLC uses):
 //!
-//! Also handy: positions are derived from the samples the callback actually
-//! consumed, not from the sink clock, so the progress bar stays correct even
-//! while a track is buffering.
+//! * The whole file is read into memory up front (`std::fs::read`). A song is a
+//!   few megabytes, and this removes disk latency, antivirus interference and
+//!   cold-cache stalls from the decode path completely. We deliberately do *not*
+//!   decode the entire track to PCM: that would cost ~100 MB of RAM per song and
+//!   add seconds of delay before playback starts.
+//! * A decode thread turns the file into `f32` samples ahead of the playhead.
+//! * Samples cross the thread boundary through [`SampleRing`], a lock-free
+//!   single-producer/single-consumer ring. The callback's `pop()` never blocks,
+//!   never allocates, and a busy producer is *not* mistaken for an empty buffer
+//!   (that bug produced clicks in the previous mutex-based design).
+//! * If the ring really is empty the source emits silence so the device keeps its
+//!   own clock instead of underrunning, and a watchdog ends the track if the
+//!   decoder has been dead for too long.
+//! * Seeking asks the decode thread to flush and reposition; positions are derived
+//!   from samples the callback actually consumed, so the progress bar stays honest
+//!   while a track is buffering.
 
-use std::collections::VecDeque;
-use std::fs::File;
-use std::io::BufReader;
 use std::path::PathBuf;
+use std::fs::File;
+use std::io::{BufReader, Read, Seek};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,20 +37,34 @@ use parking_lot::Mutex;
 use rodio::source::SeekError;
 use rodio::{Decoder, Source};
 
+use crate::ring::SampleRing;
+
 /// How many seconds of audio to keep decoded ahead of the playhead.
-const PREFETCH_SECONDS: f64 = 2.0;
-/// Samples decoded per lock acquisition (keeps the critical section tiny).
-const DECODE_CHUNK: usize = 8192;
+/// Four seconds of headroom means a slow disk, an antivirus scan or a scheduling
+/// hiccup has to stall the machine for seconds before it is audible.
+const PREFETCH_SECONDS: f64 = 4.0;
+/// Samples decoded per push. Small chunks keep the producer's slice short so the
+/// consumer is never starved for long (256 samples @ 44.1 kHz ≈ 5.8 ms).
+const DECODE_CHUNK: usize = 256;
 /// If the decode thread has produced nothing for this long while we are playing
 /// silence, give up instead of hanging on a dead decoder.
 const MAX_SILENT_SECONDS: f64 = 5.0;
+/// Minimum ring capacity, in samples, regardless of prefetch target.
+const MIN_RING_SAMPLES: usize = 65_536;
+/// Files at or below this size are read into RAM before decoding (fast path).
+/// Bigger ones are streamed from disk with the same lock-free ring, so a huge
+/// wave file costs neither a memory spike nor a delay before playback.
+const MAX_PRELOAD_BYTES: u64 = 96 * 1024 * 1024;
+
+/// Anything we can hand to the decoder: an in-memory buffer or a file handle.
+/// rodio requires `Send + Sync + 'static` on the input reader.
+trait ReadSeek: Read + Seek + Send + Sync {}
+impl<T: Read + Seek + Send + Sync> ReadSeek for T {}
 
 struct Ring {
-    samples: Mutex<VecDeque<f32>>,
+    samples: SampleRing,
     /// Samples handed to the audio callback since the last (re)start of this track.
     consumed: AtomicU64,
-    /// Cumulative sample offset of the first sample currently in the ring.
-    base_offset: AtomicU64,
     /// Set once the decoder reached end of file.
     eof: AtomicBool,
     /// Set when the decoder thread died (corrupt file, device gone, ...).
@@ -60,24 +80,25 @@ struct Ring {
 
 impl Ring {
     fn new(channels: u16, sample_rate: u32, total: Option<Duration>) -> Arc<Self> {
+        let channels = channels.max(1);
+        let sample_rate = sample_rate.max(8_000);
+        let wanted = (PREFETCH_SECONDS * sample_rate as f64 * channels as f64) as usize;
         Arc::new(Ring {
-            samples: Mutex::new(VecDeque::with_capacity(65_536)),
+            samples: SampleRing::with_capacity(wanted.max(MIN_RING_SAMPLES)),
             consumed: AtomicU64::new(0),
-            base_offset: AtomicU64::new(0),
             eof: AtomicBool::new(false),
             failed: Mutex::new(None),
             seek_to: Mutex::new(None),
             stop: AtomicBool::new(false),
-            channels: channels.max(1),
-            sample_rate: sample_rate.max(8_000),
+            channels,
+            sample_rate,
             total,
         })
     }
 
     /// How much audio is sitting in the ring (seconds).
     fn buffered_seconds(&self) -> f64 {
-        let len = self.samples.lock().len() as f64;
-        len / (self.channels as f64 * self.sample_rate as f64)
+        self.samples.buffered_seconds(self.channels, self.sample_rate)
     }
 
     fn eof(&self) -> bool {
@@ -95,14 +116,30 @@ pub struct StreamingSource {
     /// Number of consecutive silence samples emitted (watchdog for a stalled decoder).
     silent: u64,
     finished: bool,
+    /// Times the callback ran dry (should stay at zero on healthy hardware).
+    underruns: u64,
 }
 
 impl StreamingSource {
     /// Build the source and start decoding `path` immediately on a worker thread.
     pub fn open(path: PathBuf) -> Result<Self, String> {
-        let file = File::open(&path).map_err(|e| format!("Could not open audio file: {e}"))?;
-        // Probe/parse on this thread so the very first callback has nothing to do.
-        let decoder = Decoder::new(BufReader::new(file))
+        // Preload the file into memory so the decode thread never touches the disk
+        // (an antivirus scan or a slow drive can then never cause an underrun).
+        // Large files are streamed instead: preloading a 500 MB wave would stall
+        // the start of playback and waste hundreds of megabytes of RAM.
+        let size = std::fs::metadata(&path)
+            .map_err(|e| format!("Could not read audio file: {e}"))?
+            .len();
+        let input: Box<dyn ReadSeek> = if size <= MAX_PRELOAD_BYTES {
+            let bytes = std::fs::read(&path)
+                .map_err(|e| format!("Could not read audio file: {e}"))?;
+            Box::new(std::io::Cursor::new(bytes))
+        } else {
+            let file = File::open(&path)
+                .map_err(|e| format!("Could not open audio file: {e}"))?;
+            Box::new(BufReader::new(file))
+        };
+        let decoder = Decoder::new(input)
             .map_err(|e| format!("Unsupported or corrupt audio stream: {e}"))?
             .convert_samples::<f32>();
         let channels = decoder.channels();
@@ -118,6 +155,7 @@ impl StreamingSource {
             ring,
             silent: 0,
             finished: false,
+            underruns: 0,
         })
     }
 
@@ -127,13 +165,21 @@ impl StreamingSource {
         let deadline = std::time::Instant::now() + timeout;
         loop {
             let ready = self.ring.buffered_seconds();
-            if ready >= seconds || self.ring.failed().is_some() || std::time::Instant::now() >= deadline {
+            if ready >= seconds
+                || self.ring.failed().is_some()
+                || std::time::Instant::now() >= deadline
+            {
                 return ready;
             }
-            std::thread::sleep(Duration::from_millis(3));
+            std::thread::sleep(Duration::from_millis(2));
         }
     }
 
+    /// How many times the callback ran out of samples (diagnostics + tests).
+    #[allow(dead_code)]
+    pub fn underruns(&self) -> u64 {
+        self.underruns
+    }
 }
 
 impl Iterator for StreamingSource {
@@ -144,18 +190,16 @@ impl Iterator for StreamingSource {
         if self.finished || self.ring.stop.load(Ordering::Relaxed) {
             return None;
         }
-        // Fast path: never blocks the audio thread. `try_lock` only loses when the
-        // decode thread is mid-push, which is a few microseconds at most.
-        if let Some(mut buf) = self.ring.samples.try_lock() {
-            if let Some(sample) = buf.pop_front() {
-                self.ring.consumed.fetch_add(1, Ordering::Relaxed);
-                self.silent = 0;
-                return Some(sample);
-            }
+
+        // Fast path: lock-free, wait-free, allocation-free.
+        if let Some(sample) = self.ring.samples.pop() {
+            self.ring.consumed.fetch_add(1, Ordering::Relaxed);
+            self.silent = 0;
+            return Some(sample);
         }
 
         // Nothing buffered right now: emit silence so the device keeps its clock
-        // instead of underrunning, and let the spinner catch up.
+        // instead of underrunning, and let the decoder catch up.
         if self.ring.eof() {
             self.finished = true;
             return None;
@@ -166,6 +210,7 @@ impl Iterator for StreamingSource {
             return None;
         }
 
+        self.underruns += 1;
         self.silent += 1;
         let limit = (MAX_SILENT_SECONDS
             * self.ring.sample_rate as f64
@@ -205,7 +250,6 @@ impl Source for StreamingSource {
             (pos.as_secs_f64() * self.ring.sample_rate as f64) as u64 * self.ring.channels as u64,
             Ordering::Relaxed,
         );
-        self.ring.base_offset.store(0, Ordering::Relaxed);
         self.silent = 0;
         Ok(())
     }
@@ -213,7 +257,7 @@ impl Source for StreamingSource {
 
 impl Drop for StreamingSource {
     fn drop(&mut self) {
-        // Tell the decode thread to exit; it owns the file handle from here.
+        // Tell the decode thread to exit; it owns the decoder from here.
         self.ring.stop.store(true, Ordering::Release);
     }
 }
@@ -222,9 +266,7 @@ fn decode_loop<S>(mut decoder: S, ring: Arc<Ring>)
 where
     S: Source<Item = f32> + Send + 'static,
 {
-    let channels = ring.channels as usize;
-    let sample_rate = ring.sample_rate as f64;
-    let capacity = (PREFETCH_SECONDS * sample_rate * channels as f64) as usize;
+    let mut chunk: Vec<f32> = Vec::with_capacity(DECODE_CHUNK);
 
     loop {
         if ring.stop.load(Ordering::Acquire) {
@@ -232,12 +274,15 @@ where
         }
 
         // Handle a pending seek before producing more samples.
-        let seek_target = { *ring.seek_to.lock() };
+        let seek_target = *ring.seek_to.lock();
         if let Some(seconds) = seek_target {
             *ring.seek_to.lock() = None;
-            ring.samples.lock().clear();
+            ring.samples.clear();
             ring.eof.store(false, Ordering::Release);
-            match Source::try_seek(&mut decoder, Duration::from_secs_f64(seconds.max(0.0).min(86_400.0))) {
+            match Source::try_seek(
+                &mut decoder,
+                Duration::from_secs_f64(seconds.max(0.0).min(86_400.0)),
+            ) {
                 Ok(()) => {}
                 Err(err) => {
                     *ring.failed.lock() = Some(format!("Seek failed: {err}"));
@@ -247,14 +292,14 @@ where
             continue;
         }
 
-        if ring.samples.lock().len() >= capacity {
-            // Buffer is full — nap until the playhead drains some of it.
-            std::thread::sleep(Duration::from_millis(8));
+        if ring.samples.space() < DECODE_CHUNK {
+            // Ring is full — nap until the playhead drains some of it.
+            std::thread::sleep(Duration::from_millis(2));
             continue;
         }
 
-        // Decode a chunk outside the lock, then push it in one short critical section.
-        let mut chunk: Vec<f32> = Vec::with_capacity(DECODE_CHUNK);
+        // Decode a small chunk, then publish it in one atomic store.
+        chunk.clear();
         let mut hit_eof = false;
         for _ in 0..DECODE_CHUNK {
             match decoder.next() {
@@ -267,8 +312,7 @@ where
         }
 
         if !chunk.is_empty() {
-            let mut buf = ring.samples.lock();
-            buf.extend(chunk);
+            ring.samples.push_slice(&chunk);
         }
 
         if hit_eof {
@@ -279,7 +323,7 @@ where
                 if ring.seek_to.lock().is_some() {
                     break;
                 }
-                std::thread::sleep(Duration::from_millis(20));
+                std::thread::sleep(Duration::from_millis(10));
             }
         }
     }
@@ -289,7 +333,7 @@ where
 mod tests {
     use super::*;
 
-    /// Minimal 16-bit PCM mono WAV writer used by the end-to-end test.
+    /// Minimal 16-bit PCM mono WAV writer used by the end-to-end tests.
     fn write_test_wav(path: &PathBuf, sample_rate: u32, seconds: f64) {
         let frames = (sample_rate as f64 * seconds) as u32;
         let data_len = frames * 2;
@@ -314,8 +358,8 @@ mod tests {
         std::fs::write(path, bytes).expect("write test wav");
     }
 
-    /// End-to-end: a real WAV file goes through the decode thread + ring buffer and
-    /// comes out as actual (non-silent) samples, then ends cleanly at EOF.
+    /// End-to-end: a real WAV file goes through the preload + decode thread + ring
+    /// and comes out as actual (non-silent) samples, then ends cleanly at EOF.
     #[test]
     fn decodes_a_real_wav_through_the_ring() {
         let path = std::env::temp_dir().join(format!("vesper-stream-test-{}.wav", std::process::id()));
@@ -339,9 +383,9 @@ mod tests {
         }
         let _ = std::fs::remove_file(&path);
 
-        // 0.5 s at 8 kHz == ~4000 frames; allow slack for container trimming.
         assert!(total >= 3_500, "expected ~4000 samples, got {total}");
         assert!(audible * 2 > total, "expected real audio, got {audible}/{total} non-zero");
+        assert_eq!(source.underruns(), 0, "a short local file must not underrun");
     }
 
     /// Seeking mid-track must not deadlock: the decode thread flushes the ring and
@@ -372,21 +416,21 @@ mod tests {
         assert!(audible > 500, "expected audio after seek, got {audible} non-zero samples");
     }
 
+    /// The ring must hold a full prefetch window without ever reallocating
+    /// (that reallocation used to happen while the callback was reading).
     #[test]
-    fn seek_resets_the_consumed_counter() {
-        let ring = Ring::new(2, 44_100, Some(Duration::from_secs(200)));
-        ring.consumed.store(44_100 * 2, Ordering::Relaxed);
-        assert_eq!(ring.consumed.load(Ordering::Relaxed), 88_200);
-        *ring.seek_to.lock() = Some(90.0);
-        assert_eq!(*ring.seek_to.lock(), Some(90.0));
-    }
-
-    #[test]
-    fn buffered_seconds_matches_ring_contents() {
-        let ring = Ring::new(2, 8_000, None);
-        // 8 kHz stereo: 16_000 samples per second, so 8_000 samples == 0.5 s.
-        ring.samples.lock().extend(std::iter::repeat(0.0).take(8_000));
-        assert!((ring.buffered_seconds() - 0.5).abs() < 1e-9);
+    fn ring_holds_the_whole_prefetch_window() {
+        let ring = Ring::new(2, 44_100, None);
+        let wanted = (PREFETCH_SECONDS * 44_100.0 * 2.0) as usize;
+        assert!(
+            ring.samples.capacity() >= wanted,
+            "capacity {} < prefetch {}",
+            ring.samples.capacity(),
+            wanted
+        );
+        let filled = ring.samples.push_slice(&vec![0.25f32; wanted]);
+        assert_eq!(filled, wanted, "must accept the entire window");
+        assert!((ring.buffered_seconds() - PREFETCH_SECONDS).abs() < 0.01);
     }
 
     #[test]
@@ -394,5 +438,15 @@ mod tests {
         let ring = Ring::new(2, 44_100, None);
         assert!(!ring.eof());
         assert_eq!(ring.buffered_seconds(), 0.0);
+    }
+
+    #[test]
+    fn consumed_counter_tracks_handed_out_samples() {
+        let ring = Ring::new(2, 44_100, Some(Duration::from_secs(200)));
+        ring.samples.push_slice(&[0.0; 100]);
+        for _ in 0..100 {
+            assert!(ring.samples.pop().is_some());
+        }
+        assert!(ring.samples.pop().is_none());
     }
 }
