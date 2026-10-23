@@ -130,8 +130,36 @@ export function SettingsScreen() {
           />
         </Row>
         <Row
+          label="Widget style"
+          description={
+            widget.style === "cover"
+              ? "Cover shows the artwork alone with the title and artist as plain text — click the art to play or pause, double-click to open Vesper."
+              : "Pill is the glass card with transport controls, progress bar and optional volume."
+          }
+        >
+          <div className="flex overflow-hidden rounded-[6px] border-[1.5px] border-[var(--tile-outline)]">
+            {(["pill", "cover"] as const).map((style) => (
+              <button
+                key={style}
+                type="button"
+                onClick={() => setWidget({ style })}
+                aria-pressed={(widget.style ?? "pill") === style}
+                className={`plate px-3.5 py-2 capitalize transition-colors ${
+                  (widget.style ?? "pill") === style ? "bg-ink text-paper" : "bg-paper-2 text-ink-2 hover:text-ink"
+                }`}
+              >
+                {style}
+              </button>
+            ))}
+          </div>
+        </Row>
+        <Row
           label="Widget size"
-          description="Compact trims the pill down to artwork, title, transport and time; expanded adds the volume control."
+          description={
+            widget.style === "cover"
+              ? "Compact shows a 180px cover, expanded a 240px cover."
+              : "Compact trims the pill down to artwork, title, transport and time; expanded adds the volume control."
+          }
         >
           <div className="flex overflow-hidden rounded-[6px] border-[1.5px] border-[var(--tile-outline)]">
             {(["compact", "expanded"] as const).map((size) => (
@@ -149,41 +177,48 @@ export function SettingsScreen() {
             ))}
           </div>
         </Row>
-        <Row
-          label={`Glass opacity — ${Math.round(widget.opacity * 100)}%`}
-          description="Fades only the smoked-glass background; the song title, artist and controls stay fully readable."
-        >
-          <input
-            type="range"
-            className="vesper-range w-[160px]"
-            min={55}
-            max={100}
-            value={Math.round(widget.opacity * 100)}
-            onChange={(e) => setWidget({ opacity: Number(e.target.value) / 100 })}
-            aria-label="Widget opacity"
-          />
-        </Row>
-        <Row label="Show album artwork">
-          <Toggle
-            checked={widget.showArtwork}
-            onChange={(v) => setWidget({ showArtwork: v })}
-            label="Show artwork"
-          />
-        </Row>
-        <Row label="Show progress bar & timecodes">
-          <Toggle
-            checked={widget.showProgress}
-            onChange={(v) => setWidget({ showProgress: v })}
-            label="Show progress"
-          />
-        </Row>
-        <Row label="Show volume slider">
-          <Toggle
-            checked={widget.showVolume}
-            onChange={(v) => setWidget({ showVolume: v })}
-            label="Show volume"
-          />
-        </Row>
+        {/* Pill-only rows. Kept in the tree so switching back to Pill restores
+            everything exactly as it was. Cover has no card, no progress bar and
+            no volume — it is bare artwork plus two text lines. */}
+        {(widget.style ?? "pill") === "pill" && (
+          <>
+          <Row
+            label={`Glass opacity — ${Math.round(widget.opacity * 100)}%`}
+            description="Fades only the smoked-glass background; the song title, artist and controls stay fully readable."
+          >
+            <input
+              type="range"
+              className="vesper-range w-[160px]"
+              min={55}
+              max={100}
+              value={Math.round(widget.opacity * 100)}
+              onChange={(e) => setWidget({ opacity: Number(e.target.value) / 100 })}
+              aria-label="Widget opacity"
+            />
+          </Row>
+          <Row label="Show album artwork">
+            <Toggle
+              checked={widget.showArtwork}
+              onChange={(v) => setWidget({ showArtwork: v })}
+              label="Show artwork"
+            />
+          </Row>
+          <Row label="Show progress bar & timecodes">
+            <Toggle
+              checked={widget.showProgress}
+              onChange={(v) => setWidget({ showProgress: v })}
+              label="Show progress"
+            />
+          </Row>
+          <Row label="Show volume slider">
+            <Toggle
+              checked={widget.showVolume}
+              onChange={(v) => setWidget({ showVolume: v })}
+              label="Show volume"
+            />
+          </Row>
+          </>
+        )}
       </Section>
 
       <Section
