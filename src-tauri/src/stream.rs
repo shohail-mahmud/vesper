@@ -139,9 +139,18 @@ impl StreamingSource {
                 .map_err(|e| format!("Could not open audio file: {e}"))?;
             Box::new(BufReader::new(file))
         };
-        let decoder = Decoder::new(input)
-            .map_err(|e| format!("Unsupported or corrupt audio stream: {e}"))?
-            .convert_samples::<f32>();
+        // rodio 0.21 decodes straight to f32, so no sample conversion is needed.
+        //
+        // `byte_len` + `seekable` are not optional here: unlike 0.20, `Decoder::new`
+        // no longer infers the stream length, and without it a backwards seek fails
+        // with "needs to know the length of the file/byte stream". We already know
+        // the size from the metadata call above, so hand it over.
+        let decoder = Decoder::builder()
+            .with_data(input)
+            .with_byte_len(size)
+            .with_seekable(true)
+            .build()
+            .map_err(|e| format!("Unsupported or corrupt audio stream: {e}"))?;
         let channels = decoder.channels();
         let sample_rate = decoder.sample_rate();
         let total = decoder.total_duration();
@@ -225,7 +234,7 @@ impl Iterator for StreamingSource {
 }
 
 impl Source for StreamingSource {
-    fn current_frame_len(&self) -> Option<usize> {
+    fn current_span_len(&self) -> Option<usize> {
         None
     }
 
