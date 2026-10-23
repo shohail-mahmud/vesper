@@ -11,6 +11,7 @@ mod library;
 mod metadata;
 mod model;
 mod playback;
+mod ring;
 mod smtc;
 mod stream;
 
