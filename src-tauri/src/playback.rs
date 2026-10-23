@@ -100,6 +100,60 @@ fn shuffle_in_place(items: &mut [QueueItem]) {
     }
 }
 
+/// Exactly what the audio device was opened with.
+///
+/// Filled in once, the first time the stream opens. The whole point is that the
+/// buffer request can silently be refused — this records which path was actually
+/// taken so a glitch can be traced instead of guessed at.
+#[derive(Clone, Default)]
+pub struct StreamInfo {
+    pub device: String,
+    pub sample_rate: u32,
+    pub channels: u16,
+    /// Frames requested when asking for a fixed buffer.
+    pub requested_frames: u32,
+    /// Human-readable summary of what the device actually gave us.
+    pub accepted: String,
+    /// True when the fixed request was refused and Windows chose for us.
+    pub fell_back: bool,
+}
+
+static STREAM_INFO: std::sync::OnceLock<Mutex<StreamInfo>> = std::sync::OnceLock::new();
+
+fn stream_info() -> &'static Mutex<StreamInfo> {
+    STREAM_INFO.get_or_init(|| Mutex::new(StreamInfo::default()))
+}
+
+/// Snapshot for the diagnostics command.
+pub fn diagnostics() -> (StreamInfo, u64) {
+    let info = stream_info().lock().clone();
+    (info, crate::stream::underrun_count())
+}
+
+/// Append one line to the audio log next to `library.db`.
+///
+/// Deliberately called only from the audio worker thread (never the realtime
+/// callback), so ordinary blocking file I/O is fine here.
+fn log_stream_info(info: &StreamInfo) {
+    if let Some(dir) = dirs::data_dir().map(|d| d.join("Vesper")) {
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("audio.log");
+        let line = format!(
+            "device={:?} rate={} ch={} requested_frames={} accepted={:?} fell_back={}\n",
+            info.device,
+            info.sample_rate,
+            info.channels,
+            info.requested_frames,
+            info.accepted,
+            info.fell_back
+        );
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+            let _ = f.write_all(line.as_bytes());
+        }
+    }
+}
+
 /// Requested output buffer depth, in frames.
 ///
 /// `OutputStreamBuilder::open_default_stream()` asks cpal for
@@ -141,15 +195,63 @@ fn open_output_stream(device_lost: &Arc<AtomicBool>) -> Result<OutputStream, Str
             .open_stream()
     });
 
-    match fixed {
-        Ok(stream) => Ok(stream),
-        // Some drivers reject a fixed size outright; let Windows choose again
-        // rather than leaving the user without sound.
-        Err(_) => OutputStreamBuilder::from_default_device()
-            .map(|b| b.with_error_callback(make_callback(Arc::clone(device_lost))).open_stream())
-            .unwrap_or_else(|e| Err(e))
-            .map_err(|e| format!("{e}")),
-    }
+    let (stream, fell_back) = match fixed {
+        Ok(stream) => (Ok(stream), false),
+        // Some drivers - built-in laptop audio especially - refuse a fixed size.
+        // Let Windows choose again rather than leaving the user without sound,
+        // but record that it happened.
+        Err(_) => (
+            OutputStreamBuilder::from_default_device()
+                .map(|b| b.with_error_callback(make_callback(Arc::clone(device_lost))).open_stream())
+                .unwrap_or_else(|e| Err(e)),
+            true,
+        ),
+    };
+
+    let stream = stream.map_err(|e| format!("{e}"))?;
+
+    // Read back the *negotiated* configuration. This is the ground truth: it
+    // reports what the device actually accepted, which may differ from what we
+    // asked for.
+    let cfg = stream.config();
+    let rate = cfg.sample_rate();
+    let accepted = match *cfg.buffer_size() {
+        rodio::cpal::BufferSize::Fixed(frames) => format!(
+            "fixed({frames} frames, ~{:.0} ms)",
+            frames as f64 * 1000.0 / rate.max(1) as f64
+        ),
+        rodio::cpal::BufferSize::Default => {
+            "default (Windows-chosen, usually ~10 ms)".to_string()
+        }
+    };
+
+    let info = StreamInfo {
+        device: device_name(),
+        sample_rate: rate,
+        channels: cfg.channel_count(),
+        requested_frames: DEVICE_BUFFER_FRAMES,
+        accepted,
+        fell_back,
+    };
+
+    eprintln!(
+        "[vesper] audio device: {} | {} Hz | {} ch | buffer: {} | fell_back={}",
+        info.device, info.sample_rate, info.channels, info.accepted, info.fell_back
+    );
+    *stream_info().lock() = info.clone();
+    log_stream_info(&info);
+
+    Ok(stream)
+}
+
+/// Best-effort output device name, for the diagnostics report.
+fn device_name() -> String {
+    use rodio::cpal::traits::HostTrait;
+    use rodio::DeviceTrait;
+    rodio::cpal::default_host()
+        .default_output_device()
+        .and_then(|d| d.name().ok())
+        .unwrap_or_else(|| "unknown output device".into())
 }
 
 struct WorkerState {
