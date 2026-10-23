@@ -183,6 +183,10 @@ pub struct WidgetSettings {
     pub always_on_top: bool,
     pub opacity: f64,
     pub size: String,
+    /// Widget style: "pill" (glass card, current) or "cover" (bare art + text).
+    /// Defaulted so snapshots written by older builds still deserialize.
+    #[serde(default = "default_widget_style")]
+    pub style: String,
     pub show_artwork: bool,
     pub show_progress: bool,
     pub show_volume: bool,
@@ -201,6 +205,7 @@ impl Default for WidgetSettings {
             always_on_top: false,
             opacity: 0.95,
             size: "expanded".into(),
+            style: default_widget_style(),
             show_artwork: true,
             show_progress: true,
             show_volume: true,
@@ -211,6 +216,10 @@ impl Default for WidgetSettings {
             click_through: false,
         }
     }
+}
+
+fn default_widget_style() -> String {
+    "pill".to_string()
 }
 
 fn default_speed() -> f64 {
