@@ -174,6 +174,30 @@ impl WorkerState {
         self.sync_queue_ids();
     }
 
+    /// Ramp the current sink to silence over ~25 ms, then stop it. A hard `stop()`
+    /// cuts the waveform mid-cycle and is heard as a click at every track change.
+    fn fade_out_and_stop(&mut self, steps: u32) {
+        if let Some(sink) = self.sink.take() {
+            let start = sink.volume();
+            for i in 1..=steps {
+                let f = 1.0 - (i as f32 / steps as f32);
+                sink.set_volume(start * f);
+                std::thread::sleep(Duration::from_millis(4));
+            }
+            sink.stop();
+        }
+    }
+
+    /// Fade a freshly appended sink up from silence to the requested volume.
+    fn fade_in(&self, sink: &Sink, target: f32, steps: u32) {
+        sink.set_volume(0.0);
+        for i in 1..=steps {
+            let f = i as f32 / steps as f32;
+            sink.set_volume(target * f);
+            std::thread::sleep(Duration::from_millis(4));
+        }
+    }
+
     fn load_and_play(&mut self, index: usize, autoplay: bool, start_pos: f64) {
         let Some(item) = self.queue.get(index).cloned() else {
             self.stop();
@@ -190,10 +214,8 @@ impl WorkerState {
             return;
         }
 
-        // Stop previous sink cleanly first
-        if let Some(old) = self.sink.take() {
-            old.stop();
-        }
+        // Fade the outgoing track instead of cutting it (removes the end-of-track pop).
+        self.fade_out_and_stop(6);
 
         let (volume, speed) = {
             let st = self.shared.lock();
@@ -241,9 +263,10 @@ impl WorkerState {
         if start_pos > 0.05 {
             let _ = streamed.try_seek(std::time::Duration::from_secs_f64(start_pos));
         }
-        // Wait briefly for the first fraction of a second so playback starts clean
-        // instead of with a burst of silence while the decoder warms up.
-        streamed.prefill(0.30, std::time::Duration::from_millis(200));
+        // Wait for half a second of decoded audio so playback starts clean instead
+        // of with a burst of silence while the decoder warms up. The generous
+        // timeout is fine: this runs on the audio worker thread, never the callback.
+        streamed.prefill(0.50, std::time::Duration::from_millis(900));
 
         let probed_duration = streamed
             .total_duration()
@@ -265,12 +288,13 @@ impl WorkerState {
             }
         };
 
-        sink.set_volume(volume);
         sink.set_speed(speed);
         sink.append(filtered);
         if autoplay {
             sink.play();
+            self.fade_in(&sink, volume, 6);
         } else {
+            sink.set_volume(volume);
             sink.pause();
         }
 
@@ -289,9 +313,7 @@ impl WorkerState {
     }
 
     fn stop(&mut self) {
-        if let Some(sink) = self.sink.take() {
-            sink.stop();
-        }
+        self.fade_out_and_stop(6);
         let mut st = self.shared.lock();
         st.status = PlaybackStatus::Idle;
         st.track_id = None;
