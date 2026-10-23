@@ -241,6 +241,7 @@ pub fn run() {
             commands::rename_folder,
             commands::read_track_lyrics,
             commands::prune_artwork,
+            commands::audio_diagnostics,
             commands::player_play_queue,
             commands::player_enqueue,
             commands::player_remove_queue_index,
