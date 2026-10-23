@@ -486,6 +486,30 @@ pub fn read_track_lyrics(path: String) -> Result<Option<String>, String> {
     )))
 }
 
+/// Audio diagnostics: what the output stream was actually opened with, and how
+/// many buffer underruns have happened since launch.
+///
+/// Built for one question: "it clicks when I open other apps - is that a buffer
+/// dropout or something else?" A rising `underruns` count means the callback ran
+/// dry. A count stuck at 0 means the buffer is fine and the noise is coming from
+/// elsewhere (resampling, clipping, the decoder).
+#[tauri::command]
+pub fn audio_diagnostics(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let (info, underruns) = crate::playback::diagnostics();
+    let db = state.db.lock();
+    let log_path = db.data_dir.join("audio.log").to_string_lossy().to_string();
+    Ok(serde_json::json!({
+        "device": info.device,
+        "sampleRate": info.sample_rate,
+        "channels": info.channels,
+        "requestedFrames": info.requested_frames,
+        "accepted": info.accepted,
+        "fellBack": info.fell_back,
+        "underruns": underruns,
+        "logPath": log_path,
+    }))
+}
+
 #[tauri::command]
 pub fn prune_artwork(state: State<'_, AppState>) -> Result<usize, String> {
     let db = state.db.lock();
