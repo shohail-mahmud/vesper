@@ -99,6 +99,7 @@ const defaultWidget: WidgetSettings = {
   visible: false,
   alwaysOnTop: false,
   opacity: 0.96,
+  style: "pill",
   size: "expanded",
   showArtwork: true,
   showProgress: true,
@@ -945,6 +946,7 @@ export function setWidget(patch: Partial<WidgetSettings>) {
     // goes through `widget_set_bounds`, which resizes the HWND, persists the
     // settings in Rust and broadcasts them to the widget webview live.
     if (
+      "style" in patch ||
       "size" in patch ||
       "opacity" in patch ||
       "showArtwork" in patch ||
