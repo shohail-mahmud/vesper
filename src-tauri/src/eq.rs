@@ -316,8 +316,8 @@ impl<S> Source for EqSource<S>
 where
     S: Source<Item = f32>,
 {
-    fn current_frame_len(&self) -> Option<usize> {
-        self.inner.current_frame_len()
+    fn current_span_len(&self) -> Option<usize> {
+        self.inner.current_span_len()
     }
 
     fn channels(&self) -> u16 {
