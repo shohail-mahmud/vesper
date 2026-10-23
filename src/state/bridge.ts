@@ -124,8 +124,20 @@ export interface NativeApi {
   widgetSetBounds(settings: WidgetSettings): Promise<void>;
   openPath(path: string): Promise<void>;
   openDataFolder(): Promise<string>;
+  audioDiagnostics(): Promise<AudioDiagnostics>;
   openExternal(url: string): Promise<void>;
   factoryReset(): Promise<void>;
+}
+
+export interface AudioDiagnostics {
+  device: string;
+  sampleRate: number;
+  channels: number;
+  requestedFrames: number;
+  accepted: string;
+  fellBack: boolean;
+  underruns: number;
+  logPath: string;
 }
 
 export const native: NativeApi = {
@@ -175,6 +187,7 @@ export const native: NativeApi = {
   widgetSetBounds: (settings) => nativeInvoke("widget_set_bounds", { settings }),
   openPath: (path) => nativeInvoke("open_path", { path }),
   openDataFolder: () => nativeInvoke<string>("open_data_folder"),
+  audioDiagnostics: () => nativeInvoke<AudioDiagnostics>("audio_diagnostics"),
   openExternal: (url) => nativeInvoke("open_external", { url }),
   factoryReset: () => nativeInvoke("factory_reset"),
 };
