@@ -12,13 +12,13 @@
 //!    is requested later.
 
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use rodio::{OutputStream, OutputStreamHandle, Sink, Source};
+use rodio::{OutputStream, OutputStreamBuilder, Sink, Source};
 
 use crate::eq::{EqSource, SharedEqBank};
 use crate::stream::StreamingSource;
@@ -100,8 +100,62 @@ fn shuffle_in_place(items: &mut [QueueItem]) {
     }
 }
 
+/// Requested output buffer depth, in frames.
+///
+/// `OutputStreamBuilder::open_default_stream()` asks cpal for
+/// `BufferSize::Default`, which WASAPI turns into `hnsBufferDuration = 0` -
+/// "let Windows decide". In shared mode that lands on the engine period,
+/// typically ~10 ms. Ten milliseconds of tank runs dry the moment a network or
+/// GPU driver holds the CPU in a DPC/ISR longer than that, which is the click
+/// heard while browsing or scrolling. Everything upstream (4 s prefetch,
+/// lock-free ring, in-RAM files) rides out such a stall easily; only the device
+/// buffer could not.
+///
+/// 2048 frames is ~43 ms at 48 kHz and ~46 ms at 44.1 kHz - roughly four times
+/// the tolerance, and still far below anything audible as latency for music.
+const DEVICE_BUFFER_FRAMES: u32 = 2048;
+
+/// Open the default output stream with a fixed, deeper device buffer.
+///
+/// Falls back to the previous behaviour (letting Windows choose the period)
+/// whenever the driver rejects a fixed size. A device that says no must never
+/// cost the user their sound.
+fn open_output_stream(device_lost: &Arc<AtomicBool>) -> Result<OutputStream, String> {
+    // rodio 0.21 makes `Sink::connect_new` infallible, so the old
+    // "Audio output stream lost" branch has nowhere to fire. The builder's error
+    // callback replaces it: if the endpoint dies (Bluetooth headphones switching,
+    // a USB DAC unplugged) we raise a flag and the next play reopens the device.
+    let make_callback = |flag: Arc<AtomicBool>| {
+        move |err: rodio::cpal::StreamError| {
+            eprintln!("[vesper] output stream error: {err}");
+            flag.store(true, Ordering::Release);
+        }
+    };
+
+    // Fixed depth first - this is the whole point of the function. The order
+    // matters: trying `open_default_stream()` first would succeed with the
+    // shallower buffer and silently never apply the fix.
+    let fixed = OutputStreamBuilder::from_default_device().and_then(|b| {
+        b.with_buffer_size(rodio::cpal::BufferSize::Fixed(DEVICE_BUFFER_FRAMES))
+            .with_error_callback(make_callback(Arc::clone(device_lost)))
+            .open_stream()
+    });
+
+    match fixed {
+        Ok(stream) => Ok(stream),
+        // Some drivers reject a fixed size outright; let Windows choose again
+        // rather than leaving the user without sound.
+        Err(_) => OutputStreamBuilder::from_default_device()
+            .map(|b| b.with_error_callback(make_callback(Arc::clone(device_lost))).open_stream())
+            .unwrap_or_else(|e| Err(e))
+            .map_err(|e| format!("{e}")),
+    }
+}
+
 struct WorkerState {
-    stream: Option<(OutputStream, OutputStreamHandle)>,
+    stream: Option<OutputStream>,
+    /// Set by the output stream's error callback when the endpoint disappears.
+    device_lost: Arc<AtomicBool>,
     sink: Option<Sink>,
     queue: Vec<QueueItem>,
     base_queue: Vec<QueueItem>,
@@ -110,11 +164,16 @@ struct WorkerState {
 }
 
 impl WorkerState {
-    fn ensure_device(&mut self) -> Result<&OutputStreamHandle, String> {
+    fn ensure_device(&mut self) -> Result<&OutputStream, String> {
+        if self.device_lost.swap(false, Ordering::AcqRel) {
+            // The stream reported a device error: drop it and reopen below.
+            self.stream = None;
+            self.sink = None;
+        }
         if self.stream.is_none() {
-            match OutputStream::try_default() {
-                Ok(pair) => {
-                    self.stream = Some(pair);
+            match open_output_stream(&self.device_lost) {
+                Ok(stream) => {
+                    self.stream = Some(stream);
                     self.shared.lock().device_available = true;
                 }
                 Err(err) => {
@@ -126,7 +185,7 @@ impl WorkerState {
                 }
             }
         }
-        Ok(&self.stream.as_ref().unwrap().1)
+        Ok(self.stream.as_ref().unwrap())
     }
 
     fn effective_volume(&self) -> f32 {
@@ -225,7 +284,7 @@ impl WorkerState {
         let eq_bank = Arc::clone(&self.eq_bank);
 
         let handle = match self.ensure_device() {
-            Ok(h) => h.clone(),
+            Ok(h) => h,
             Err(err) => {
                 let mut st = self.shared.lock();
                 st.status = if autoplay {
@@ -276,17 +335,7 @@ impl WorkerState {
 
         let filtered = EqSource::new(streamed, eq_bank);
 
-        let sink = match Sink::try_new(&handle) {
-            Ok(s) => s,
-            Err(err) => {
-                // Output endpoint may have changed on Windows (e.g. Bluetooth headphones switched)
-                self.stream = None;
-                let mut st = self.shared.lock();
-                st.status = PlaybackStatus::Error;
-                st.error = Some(format!("Audio output stream lost: {err}"));
-                return;
-            }
-        };
+        let sink = Sink::connect_new(handle.mixer());
 
         sink.set_speed(speed);
         sink.append(filtered);
@@ -417,8 +466,10 @@ impl PlaybackService {
         std::thread::Builder::new()
             .name("vesper-audio".into())
             .spawn(move || {
+                let device_lost = Arc::new(AtomicBool::new(false));
                 let mut worker = WorkerState {
-                    stream: OutputStream::try_default().ok(),
+                    stream: open_output_stream(&device_lost).ok(),
+                    device_lost,
                     sink: None,
                     queue: Vec::new(),
                     base_queue: Vec::new(),
