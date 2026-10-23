@@ -39,6 +39,19 @@ use rodio::{Decoder, Source};
 
 use crate::ring::SampleRing;
 
+/// Process-wide count of buffer underruns: how many times the audio callback
+/// asked for a sample and the ring had nothing to give.
+///
+/// This is the single most useful number for diagnosing "it clicks when I do
+/// other things". If it stays at 0 while the user hears a glitch, the buffer is
+/// not the problem and the fault is elsewhere (resampling, clipping, a codec).
+static UNDERRUNS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Total underruns since the app started. Safe to read from any thread.
+pub fn underrun_count() -> u64 {
+    UNDERRUNS.load(Ordering::Relaxed)
+}
+
 /// How many seconds of audio to keep decoded ahead of the playhead.
 /// Four seconds of headroom means a slow disk, an antivirus scan or a scheduling
 /// hiccup has to stall the machine for seconds before it is audible.
@@ -220,6 +233,7 @@ impl Iterator for StreamingSource {
         }
 
         self.underruns += 1;
+        UNDERRUNS.fetch_add(1, Ordering::Relaxed);
         self.silent += 1;
         let limit = (MAX_SILENT_SECONDS
             * self.ring.sample_rate as f64
