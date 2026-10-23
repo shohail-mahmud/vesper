@@ -703,11 +703,29 @@ pub fn widget_close(app: AppHandle, state: State<'_, AppState>) -> Result<(), St
     Ok(())
 }
 
-fn pill_dimensions(size: &str) -> (f64, f64) {
-    if size == "compact" {
-        (364.0, 96.0)
-    } else {
-        (424.0, 112.0)
+/// Window size for a widget style + size pair.
+///
+/// "pill" is the original glass card. "cover" is the bare-artwork style: the
+/// window hugs the square cover plus its two text lines, so it is much taller
+/// and much narrower than a pill.
+fn widget_dimensions(style: &str, size: &str) -> (f64, f64) {
+    let compact = size == "compact";
+    match style {
+        // 240px art (180 compact) + 13px gap + two text lines + breathing room
+        "cover" => {
+            if compact {
+                (200.0, 244.0)
+            } else {
+                (260.0, 304.0)
+            }
+        }
+        _ => {
+            if compact {
+                (364.0, 96.0)
+            } else {
+                (424.0, 112.0)
+            }
+        }
     }
 }
 
@@ -715,7 +733,7 @@ fn pill_dimensions(size: &str) -> (f64, f64) {
 pub fn widget_show(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let settings = state.widget.lock().clone();
     if let Some(window) = app.get_webview_window("widget") {
-        let (w, h) = pill_dimensions(&settings.size);
+        let (w, h) = widget_dimensions(&settings.style, &settings.size);
         let _ = window.set_always_on_top(settings.always_on_top);
         let _ = window.set_size(tauri::LogicalSize::new(w, h));
         if settings.x > 0.0 || settings.y > 0.0 {
@@ -755,7 +773,7 @@ pub fn widget_set_bounds(
     settings: WidgetSettings,
 ) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("widget") {
-        let (w, h) = pill_dimensions(&settings.size);
+        let (w, h) = widget_dimensions(&settings.style, &settings.size);
         let _ = window.set_size(tauri::LogicalSize::new(w, h));
     }
     *state.widget.lock() = settings.clone();
