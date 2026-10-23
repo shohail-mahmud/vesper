@@ -74,10 +74,14 @@ export interface PlaybackState {
   error?: string;
 }
 
+/** Widget appearance: the original glass pill, or bare cover art + two text lines. */
+export type WidgetStyle = "pill" | "cover";
+
 export interface WidgetSettings {
   visible: boolean;
   alwaysOnTop: boolean;
   opacity: number;
+  style: WidgetStyle;
   size: "compact" | "expanded";
   showArtwork: boolean;
   showProgress: boolean;
