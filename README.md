@@ -1,78 +1,118 @@
 # Vesper
 
-A minimalist, native Windows local music player built with **Tauri 2**, **Rust (`rodio` + `symphonia` + `rusqlite` + `lofty` + `souvlaki`)**, **React 19**, **TypeScript**, and **Tailwind CSS 4**.
+**Your music. Your machine. Nothing else.**
+
+Vesper is a music player for Windows that plays the songs already on your computer — no account to create, no subscription, no internet connection required. Import your folders once and everything is there every time you open it.
 
 ---
 
-## Highlights
+## The little player that floats on your desktop
 
-- **Minimalist Square-Tile Home Library**
-  - Single solid background surface (light & dark solid themes) with sharp dark-outlined tiles and zero mock filler data.
-  - **`[+] Import Music` Tile (Always First)**: One-click menu with **Import Folder** (creates a persistent folder playlist tile) and **Import Track** (imports individual audio files directly into the Home library without scanning their parent directory).
-  - **Folder Playlist Tiles**: Horizontal wrapping grid of square folder tiles supporting individual track playback, **Play All**, **Shuffle**, display-name editing, subfolder toggle, folder refresh, **Show in Windows Explorer**, and non-destructive removal from the library.
-  - **Individual Track Tiles & List View**: Visually distinct tiles on Home for loose tracks that start playback immediately when clicked.
-- **Native Multi-Threaded Rust Audio Engine (`src-tauri/src/playback.rs` & `eq.rs`)**
-  - Dedicated OS audio thread with `rodio 0.20` + `symphonia-all` decoding **MP3, FLAC, WAV, M4A, AAC, OGG, Opus, AIFF**.
-  - **Real-Time 10-Band Biquad Equalizer (`32 Hz – 16 kHz`)** + Preamp (`-12 dB` to `+12 dB`) + 9 presets (`Flat`, `Bass Boost`, `Treble Boost`, `Acoustic`, `Classical`, `Electronic`, `Rock`, `Vocal`, `Late Night`) + variable playback speed (`0.5×` – `2.0×`).
-  - Sample-accurate track elapsed position accounting across pauses, seeks, and speed changes.
-- **Synced `.lrc` & Embedded Lyrics (`src-tauri/src/commands.rs` & `src/lib/lyrics.ts`)**
-  - Automatically discovers sidecar `.lrc` files beside audio tracks or reads embedded `USLT` / Vorbis `LYRICS` tags, with click-to-seek lines.
-- **Full Windows OS Integration**
-  - **System Tray (`tray-icon`)**: Minimize-to-tray background playback + tray menu (*Open Vesper*, *Play / Pause*, *Next Track*, *Previous Track*, *Toggle Mini-Widget*, *Quit Vesper*).
-  - **Hardware Media Keys & Windows Flyout (`SMTC` via `souvlaki`)**: Play/Pause/Next/Prev hardware keys, Bluetooth headset controls, and Windows 10/11 volume flyout metadata & cover art.
-  - **Floating Smoked-Glass Desktop Mini-Widget**: Dedicated transparent OS window (`?window=widget`) synced with the main engine, compact & expanded layouts, pin-on-top, opacity slider, and one-click *Open Library* button.
-  - **Native Drag & Drop + File Associations**: Drop folders or audio files directly onto the window, or double-click audio files in Windows Explorer (`Open with Vesper`).
-- **Automated Windows Installer Pipeline (`.github/workflows/windows-build.yml`)**
-  - Builds `vesper.exe`, Windows `.msi`, and NSIS `-setup.exe` installers automatically on GitHub Actions (`windows-latest`), uploading build artifacts on every push and publishing GitHub Releases on `v*` tags.
+Keep the music in sight without keeping the whole app open. Vesper's widget sits on your desktop like a small, always-there remote — over your wallpaper, above other windows if you want, synced with whatever is playing.
+
+<table>
+<tr>
+<td width="50%" align="center">
+<img src="docs/screenshots/widget-pill.png" alt="Vesper pill widget" width="440"><br>
+<b>Pill</b> — artwork, controls, progress bar and time
+</td>
+<td width="50%" align="center">
+<img src="docs/screenshots/widget-cover.png" alt="Vesper cover widget" width="400"><br>
+<b>Cover</b> — just the album art and the song name
+</td>
+</tr>
+</table>
+
+Pick whichever you like in **Settings → Widget**. Switching is instant — the widget reshapes itself, no restart.
+
+- Click the artwork to **play or pause**. Double-click it to open your full library.
+- Keep it **on top of other windows**, or let it sit behind them.
+- Make it **see-through**, or let clicks pass straight through to your desktop.
+- Choose **compact** or **expanded** to match how much space you want to give it.
 
 ---
 
-## Keyboard Shortcuts
+## What you can do
 
-| Shortcut | Action |
+### Build your library
+- **Import a folder** and Vesper remembers it as a playlist you can come back to — including new songs you add to it later.
+- **Import single songs** if you don't want a whole folder added.
+- **Drag and drop** files or entire folders onto the window. Or just double-click any song in File Explorer and choose *Open with Vesper*.
+- **Find anything instantly** with `Ctrl + F` — no scrolling through hundreds of songs.
+
+### Make it yours
+- **Give any song its own cover art.** Pick an image once and it stays, even after you restart.
+- **Rename and organise** your folder playlists however makes sense to you.
+- **Remove** anything from your library without ever touching the actual files on your disk.
+
+### Listen the way you want
+- **10-band equalizer** with ten ready-made presets — Bass Boost, Vocal Clarity, Late Night Soft and more — plus a preamp so you can push it exactly as far as you like.
+- **Change the speed** from 0.5× to 2.0× without the pitch going weird.
+- **Synced lyrics** shown line by line, following the song. Click any line to jump straight to that moment.
+- **Queue, shuffle and repeat** — including repeat-one, and it all survives a restart.
+- **Hardware media keys** on your keyboard work, along with your Bluetooth headphones' play/pause button, and the Windows volume flyout shows the song and cover art.
+- Music keeps playing **smoothly while you browse, scroll or game** — no cracking, no stuttering.
+
+### Supported formats
+MP3, FLAC, WAV, M4A, AAC, OGG, Opus and AIFF.
+
+---
+
+## Install
+
+1. Go to [**Releases**](../../releases/latest) and download `Vesper_<version>_x64-setup.exe`.
+2. Run it. That's it — there's no account screen and nothing to configure.
+
+> **Please use the `-setup.exe`.** The `.msi` installs the same app but leaves your library behind when you uninstall.
+
+### What your PC needs
+
+| Requirement | Detail |
 | --- | --- |
-| `Space` | Play / Pause |
-| `Left` / `Right` | Seek `-5s` / `+5s` |
-| `Shift + Left` / `Shift + Right` | Previous / Next track |
-| `Ctrl + F` | Focus instant library search |
-| `S` | Toggle Shuffle |
-| `R` | Cycle Repeat (`off` → `all` → `one`) |
-| `M` | Mute / Unmute |
-| `Q` | Toggle Up Next Queue drawer |
-| `L` | Toggle Synced Lyrics drawer |
-| `E` | Toggle 10-Band Equalizer & Speed drawer |
-| `W` | Toggle Floating Desktop Mini-Widget |
+| **Windows** | 10 (version 1803 or newer) or Windows 11 |
+| **Type** | 64-bit |
+
+Windows 7 and 8 aren't supported — they're missing the browser engine Vesper runs on. Nothing can be done about that from a launcher or patch.
 
 ---
 
-## Building Locally on Windows
+## Your files stay yours
 
-### Prerequisites
-1. **Node.js 20+**
-2. **Rust stable** (`x86_64-pc-windows-msvc` via [rustup.rs](https://rustup.rs))
-3. **Visual Studio C++ Build Tools** (*Desktop development with C++* workload)
+Vesper only ever **reads** your music, and only ever reads the picture you choose as a cover. It copies what it needs into its own folder and never modifies, moves or deletes your originals.
 
-### Commands
+Uninstalling Vesper removes everything it created — your library, playlists, settings and saved covers — so the next install starts completely clean. Your music files are exactly where you left them.
 
-```powershell
-# Install frontend dependencies
-npm install
+---
 
-# Run TypeScript check + unit test suite
-npm run typecheck
-npm test
+## Keyboard shortcuts
 
-# Run Rust backend unit tests
-cargo test --manifest-path src-tauri/Cargo.toml
+| Shortcut | What it does |
+| --- | --- |
+| `Space` | Play / pause |
+| `←` `→` | Skip back / forward 5 seconds |
+| `Shift + ←` `Shift + →` | Previous / next song |
+| `Ctrl + F` | Search your library |
+| `S` | Shuffle on / off |
+| `R` | Repeat: off → all → one song |
+| `M` | Mute |
+| `Q` | Show the up-next queue |
+| `L` | Show lyrics |
+| `E` | Show the equalizer |
+| `W` | Show or hide the desktop widget |
 
-# Launch native Windows app in dev mode (with hot reload)
-npm run tauri:dev
+---
 
-# Produce production Windows installers (.msi + NSIS -setup.exe)
-npm run tauri:build
-```
+## Made by
 
-Built installers are written to:
-- `src-tauri/target/release/vesper.exe`
-- `src-tauri/target/release/bundle/msi/*.msi`
-- `src-tauri/target/release/bundle/nsis/*-setup.exe`
+**Shohail Mahmud**
+
+- Instagram: [@shohailmahmud09](https://instagram.com/shohailmahmud09)
+- Email: <!-- TODO: put your Gmail address here, e.g. yourname@gmail.com -->
+
+Found a bug, or want a feature? Message me on Instagram — that's the fastest way to reach me.
+
+---
+
+## License
+
+See [LICENSE](LICENSE).
