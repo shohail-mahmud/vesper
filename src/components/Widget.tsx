@@ -44,6 +44,77 @@ export function Widget({ mode }: WidgetProps) {
     if (commit) void seek(target);
   };
 
+  // ---- Cover style ------------------------------------------------------
+  // Bare artwork with two pure text lines underneath: no card, no frame, no
+  // background, no shadow behind the glyphs. The window itself is transparent,
+  // so the text sits directly on the desktop. Click the art to play/pause,
+  // double-click to open the full player.
+  if (widget.style === "cover") {
+    const artSize = compact ? 180 : 240;
+    return (
+      <div
+        className={
+          mode === "window"
+            ? "flex h-full w-full items-start justify-center bg-transparent p-2"
+            : "w-fit"
+        }
+        onWheel={(e) => {
+          if (Math.abs(e.deltaY) < 2) return;
+          const step = e.deltaY < 0 ? 0.05 : -0.05;
+          setVolume(playback.volume + step);
+        }}
+      >
+        <div
+          data-tauri-drag-region
+          className="flex select-none flex-col items-center"
+          style={{ width: artSize }}
+        >
+          <button
+            type="button"
+            data-tauri-drag-region
+            onClick={() => void togglePlay()}
+            onDoubleClick={() => void openMainWindow()}
+            title={playing ? "Pause · double-click to open Vesper" : "Play · double-click to open Vesper"}
+            aria-label={playing ? "Pause" : "Play"}
+            className="block cursor-pointer overflow-hidden bg-[rgba(10,10,14,0.55)]"
+            style={{ width: artSize, height: artSize }}
+          >
+            {artwork ? (
+              <img
+                src={artwork}
+                alt=""
+                draggable={false}
+                className="pointer-events-none h-full w-full object-cover"
+              />
+            ) : (
+              <span className="flex h-full w-full items-center justify-center text-white/50">
+                <I.NoteSingle size={compact ? 44 : 56} />
+              </span>
+            )}
+          </button>
+
+          {/* Two pure text lines — no background, no shadow, no outline. */}
+          <div
+            data-tauri-drag-region
+            className={`mt-[13px] w-full text-center leading-tight ${compact ? "text-[13.5px]" : "text-[15px]"}`}
+          >
+            <div data-tauri-drag-region className="truncate-1 font-bold tracking-[-0.01em] text-white">
+              {track?.title ?? "Nothing playing"}
+            </div>
+            <div
+              data-tauri-drag-region
+              className={`truncate-1 mt-[2px] font-medium text-white/[0.62] ${
+                compact ? "text-[11.5px]" : "text-[12.5px]"
+              }`}
+            >
+              {track?.artist ?? "—"}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={
