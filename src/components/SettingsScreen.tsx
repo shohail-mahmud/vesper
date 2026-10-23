@@ -10,7 +10,7 @@ import {
   useApp,
 } from "../state/store";
 import { SUPPORTED_EXTENSIONS } from "../lib/path";
-import { native, runtime } from "../state/bridge";
+import { native, runtime, type AudioDiagnostics } from "../state/bridge";
 import * as I from "./Icons";
 
 /** Version comes from package.json at build time (vite.config.ts → `define`). */
@@ -94,6 +94,7 @@ export function SettingsScreen() {
   const state = useApp();
   const { settings, widget, library } = state;
   const [confirmingReset, setConfirmingReset] = useState(false);
+  const [diag, setDiag] = useState<AudioDiagnostics | null>(null);
 
   const trackCount = Object.keys(library.tracks).length;
   const folderCount = library.folders.length;
@@ -258,7 +259,7 @@ export function SettingsScreen() {
         {runtime.isTauri && (
           <Row
             label="Where Vesper keeps your library"
-            description="%LOCALAPPDATA%\Vesper — the SQLite index, cached cover art and preferences. It lives outside the installer, so updating or reinstalling Vesper keeps your library, and uninstalling (MSI) leaves this folder alone. Use Clean data below to erase it."
+            description="%APPDATA%\\Vesper — the SQLite index, cached cover art and preferences. Uninstalling Vesper erases this folder, so every new install starts with an empty library. Use Clean data below to erase it without uninstalling."
           >
             <button
               type="button"
@@ -343,6 +344,74 @@ export function SettingsScreen() {
       </Section>
 
       <Section
+        index="04 / Audio"
+        title="Playback health"
+        caption="What the audio device was actually opened with, and whether playback ever ran short of data."
+      >
+        {runtime.isTauri && (
+          <>
+            <Row
+              label="Audio device"
+              description={
+                diag
+                  ? `${diag.device} — ${diag.sampleRate} Hz, ${diag.channels} channel(s)`
+                  : "Not opened yet. Press Check after playing something."
+              }
+            >
+              <button
+                type="button"
+                className="btn btn-ghost py-1.5 text-[11.5px]"
+                onClick={() => {
+                  void native
+                    .audioDiagnostics()
+                    .then(setDiag)
+                    .catch((err: unknown) =>
+                      toast("error", "Could not read diagnostics", err instanceof Error ? err.message : String(err)),
+                    );
+                }}
+              >
+                Check
+              </button>
+            </Row>
+
+            <Row
+              label="Buffer"
+              description={
+                diag
+                  ? `${diag.accepted}${diag.fellBack ? " — the device refused a deeper buffer, so this is Windows' own default" : ""}`
+                  : "Requests a deeper buffer than Windows picks by default, so a busy browser or GPU driver can't empty it mid-song."
+              }
+            >
+              <span className={diag?.fellBack ? "plate text-warn" : "plate text-ink-3"}>
+                {diag ? (diag.fellBack ? "fallback" : "fixed") : "—"}
+              </span>
+            </Row>
+
+            <Row
+              label="Dropouts since launch"
+              description={
+                diag
+                  ? diag.underruns === 0
+                    ? "Zero — the audio callback has never run out of data, so any crackle you hear is not a buffer problem."
+                    : "Playback ran out of buffered audio this many times. A rising number means the device buffer is still too shallow for this machine."
+                  : "Hear a crackle? Check immediately after. A zero here points at something other than buffering."
+              }
+            >
+              <span className={diag && diag.underruns > 0 ? "plate text-warn" : "plate text-ink-3"}>
+                {diag ? diag.underruns : "—"}
+              </span>
+            </Row>
+
+            {diag && (
+              <p className="pt-2 text-[11px] leading-relaxed text-ink-3">
+                Full log: <span className="text-ink-2">{diag.logPath}</span>
+              </p>
+            )}
+          </>
+        )}
+      </Section>
+
+      <Section
         index="04 / About"
         title="Vesper"
         caption="A small, honest music player that plays your own files."
@@ -386,7 +455,7 @@ export function SettingsScreen() {
             <dt className="plate text-ink-3">Storage</dt>
             <dd className="text-ink-2">
               {runtime.isTauri
-                ? "SQLite · %LOCALAPPDATA%\\Vesper\\library.db"
+                ? "SQLite · %APPDATA%\\Vesper\\library.db"
                 : "WebAudio + localStorage (browser preview)"}
             </dd>
           </dl>
