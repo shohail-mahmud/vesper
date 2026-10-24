@@ -823,6 +823,47 @@ pub fn widget_set_bounds(
     Ok(())
 }
 
+/// Copies a chosen image into `%LOCALAPPDATA%\Vesper\artwork\custom-pl-*` and
+/// saves it as the playlist's own cover in SQLite. Mirrors `set_track_cover`,
+/// including deleting a superseded custom file.
+#[tauri::command]
+pub fn set_playlist_cover(
+    state: State<'_, AppState>,
+    playlist_id: String,
+    image_path: String,
+) -> Result<String, String> {
+    let db = state.db.lock();
+    let cache_dir = db.data_dir.join("artwork");
+    let saved_path = crate::metadata::save_custom_cover(
+        &cache_dir,
+        &format!("pl-{playlist_id}"),
+        std::path::Path::new(&image_path),
+    )
+    .map_err(|e| e.to_string())?;
+
+    if let Ok(Some(old)) = db.set_playlist_artwork(&playlist_id, Some(&saved_path)) {
+        if old != saved_path && old.contains("custom-pl-") {
+            let _ = std::fs::remove_file(&old);
+        }
+    }
+    Ok(saved_path)
+}
+
+/// Removes a playlist's custom cover and deletes the cached file.
+#[tauri::command]
+pub fn remove_playlist_cover(
+    state: State<'_, AppState>,
+    playlist_id: String,
+) -> Result<(), String> {
+    let db = state.db.lock();
+    if let Ok(Some(old)) = db.set_playlist_artwork(&playlist_id, None) {
+        if old.contains("custom-pl-") {
+            let _ = std::fs::remove_file(&old);
+        }
+    }
+    Ok(())
+}
+
 /// Clean Data — full factory reset.
 ///
 /// Stops playback, erases Vesper's own persisted state (library rows,
