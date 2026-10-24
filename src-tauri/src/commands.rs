@@ -720,6 +720,13 @@ pub fn widget_close(app: AppHandle, state: State<'_, AppState>) -> Result<(), St
         if let Some(window) = app.get_webview_window("widget") {
             let _ = window.hide();
         }
+        // Hiding the window is not the same as telling anyone about it. Closing
+        // from the widget's own cross runs in the *widget* webview, so the main
+        // window never learned the widget was gone and its toolbar toggle stayed
+        // lit. Flip the flag and re-broadcast so every window agrees.
+        state.widget.lock().visible = false;
+        let settings = state.widget.lock().clone();
+        let _ = app.emit("widget://settings", &settings);
     } else {
         state.player.stop();
         app.exit(0);
@@ -766,14 +773,22 @@ pub fn widget_show(app: AppHandle, state: State<'_, AppState>) -> Result<(), Str
         let _ = window.show();
         let _ = window.set_focus();
     }
+    // Mirror of the close path: keep the persisted flag authoritative so a
+    // reopen after a close can never leave the toggle out of step.
+    state.widget.lock().visible = true;
+    let settings = state.widget.lock().clone();
+    let _ = app.emit("widget://settings", &settings);
     Ok(())
 }
 
 #[tauri::command]
-pub fn widget_hide(app: AppHandle) -> Result<(), String> {
+pub fn widget_hide(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("widget") {
         let _ = window.hide();
     }
+    state.widget.lock().visible = false;
+    let settings = state.widget.lock().clone();
+    let _ = app.emit("widget://settings", &settings);
     Ok(())
 }
 
