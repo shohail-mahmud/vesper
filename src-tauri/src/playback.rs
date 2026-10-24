@@ -481,6 +481,41 @@ impl WorkerState {
         st.error = None;
     }
 
+    /// Play, or rebuild the track when the sink has already drained.
+    ///
+    /// When a track reaches its end the sink stays attached but *empty*, and the
+    /// snapshot keeps the track visible parked at its final position. Calling
+    /// `play()` on that sink resumes nothing, and `try_seek` has no samples to
+    /// move through - so Play and the seek bar both looked dead and the only way
+    /// out was re-picking the song in the library (that path rebuilds the sink).
+    ///
+    /// Restore from the saved position, or from the start when the saved position
+    /// is at/after the end of the track.
+    fn play_or_reload(&mut self) {
+        if let Some(sink) = self.sink.as_ref() {
+            if !sink.empty() {
+                sink.play();
+                self.shared.lock().status = PlaybackStatus::Playing;
+                return;
+            }
+        }
+
+        if self.queue.is_empty() {
+            return;
+        }
+
+        let (index, position, duration) = {
+            let st = self.shared.lock();
+            (st.index.max(0) as usize, st.position, st.duration)
+        };
+        let start = if duration > 0.0 && position >= duration - 0.25 {
+            0.0
+        } else {
+            position
+        };
+        self.load_and_play(index.min(self.queue.len().saturating_sub(1)), true, start);
+    }
+
     fn next(&mut self, auto_advance: bool) {
         let (index, repeat) = {
             let st = self.shared.lock();
@@ -528,12 +563,35 @@ impl WorkerState {
 
     fn seek(&mut self, seconds: f64) {
         let clamped = seconds.max(0.0);
-        if let Some(sink) = self.sink.as_ref() {
-            if sink.try_seek(Duration::from_secs_f64(clamped)).is_ok() {
-                self.shared.lock().position = clamped;
-                return;
+
+        // Only a sink that still holds audio can be seeked. A finished track
+        // leaves an empty sink behind, where `try_seek` silently does nothing -
+        // so dragging the bar back to 0:00 never worked once a song had ended.
+        let live = self
+            .sink
+            .as_ref()
+            .map(|sink| !sink.empty())
+            .unwrap_or(false);
+
+        if live {
+            if let Some(sink) = self.sink.as_ref() {
+                if sink.try_seek(Duration::from_secs_f64(clamped)).is_ok() {
+                    self.shared.lock().position = clamped;
+                    return;
+                }
             }
+        } else if !self.queue.is_empty() {
+            let (index, autoplay) = {
+                let st = self.shared.lock();
+                (
+                    st.index.max(0) as usize,
+                    matches!(st.status, PlaybackStatus::Playing),
+                )
+            };
+            self.load_and_play(index, autoplay, clamped);
+            return;
         }
+
         self.shared.lock().position = clamped;
     }
 
@@ -606,20 +664,7 @@ impl PlaybackService {
                                 .unwrap_or(0);
                             worker.load_and_play(resolved_idx, autoplay, start_position);
                         }
-                        AudioCommand::Play => {
-                            if let Some(sink) = worker.sink.as_ref() {
-                                sink.play();
-                                worker.shared.lock().status = PlaybackStatus::Playing;
-                            } else {
-                                let (idx, pos) = {
-                                    let st = worker.shared.lock();
-                                    (st.index.max(0) as usize, st.position)
-                                };
-                                if !worker.queue.is_empty() {
-                                    worker.load_and_play(idx, true, pos);
-                                }
-                            }
-                        }
+                        AudioCommand::Play => worker.play_or_reload(),
                         AudioCommand::Pause => {
                             if let Some(sink) = worker.sink.as_ref() {
                                 sink.pause();
@@ -634,15 +679,8 @@ impl PlaybackService {
                                     sink.pause();
                                 }
                                 worker.shared.lock().status = PlaybackStatus::Paused;
-                            } else if let Some(sink) = worker.sink.as_ref() {
-                                sink.play();
-                                worker.shared.lock().status = PlaybackStatus::Playing;
-                            } else if !worker.queue.is_empty() {
-                                let (idx, pos) = {
-                                    let st = worker.shared.lock();
-                                    (st.index.max(0) as usize, st.position)
-                                };
-                                worker.load_and_play(idx, true, pos);
+                            } else {
+                                worker.play_or_reload();
                             }
                         }
                         AudioCommand::Stop => worker.stop(),
