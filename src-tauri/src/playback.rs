@@ -154,20 +154,25 @@ fn log_stream_info(info: &StreamInfo) {
     }
 }
 
-/// Requested output buffer depth, in frames.
+/// Buffer depths to try, in frames, deepest first.
 ///
-/// `OutputStreamBuilder::open_default_stream()` asks cpal for
-/// `BufferSize::Default`, which WASAPI turns into `hnsBufferDuration = 0` -
-/// "let Windows decide". In shared mode that lands on the engine period,
-/// typically ~10 ms. Ten milliseconds of tank runs dry the moment a network or
-/// GPU driver holds the CPU in a DPC/ISR longer than that, which is the click
-/// heard while browsing or scrolling. Everything upstream (4 s prefetch,
-/// lock-free ring, in-RAM files) rides out such a stall easily; only the device
-/// buffer could not.
+/// WASAPI turns `BufferSize::Default` into `hnsBufferDuration = 0` - "let
+/// Windows decide" - which in shared mode lands on the engine period, typically
+/// ~10 ms. Ten milliseconds of tank runs dry the moment anything holds the CPU
+/// in a DPC/ISR longer than that, and the audible result is a click or crackle
+/// on every keystroke and window switch.
 ///
-/// 2048 frames is ~43 ms at 48 kHz and ~46 ms at 44.1 kHz - roughly four times
-/// the tolerance, and still far below anything audible as latency for music.
-const DEVICE_BUFFER_FRAMES: u32 = 2048;
+/// A deeper buffer is the only thing that can absorb that: everything upstream
+/// (4 s prefetch, lock-free ring, in-RAM files) already rides out stalls easily,
+/// and a kernel DPC outranks every user-mode thread regardless of priority.
+///
+/// These are tried in order until one is accepted, so a driver that refuses the
+/// deepest setting cannot silently drop us back to ~10 ms:
+///   48000 frames ~ 1.0 s   - effectively immune to DPC storms
+///   24000 frames ~ 0.5 s   - the normal target
+///    9600 frames ~ 0.2 s   - last fixed attempt
+///   Windows default        - only if every fixed size is refused (reported)
+const DEVICE_BUFFER_LADDER: [u32; 3] = [48_000, 24_000, 9_600];
 
 /// Open the default output stream with a fixed, deeper device buffer.
 ///
@@ -177,8 +182,8 @@ const DEVICE_BUFFER_FRAMES: u32 = 2048;
 fn open_output_stream(device_lost: &Arc<AtomicBool>) -> Result<OutputStream, String> {
     // rodio 0.21 makes `Sink::connect_new` infallible, so the old
     // "Audio output stream lost" branch has nowhere to fire. The builder's error
-    // callback replaces it: if the endpoint dies (Bluetooth headphones switching,
-    // a USB DAC unplugged) we raise a flag and the next play reopens the device.
+    // callback replaces it: if the endpoint dies (Bluetooth switching, a USB DAC
+    // unplugged) we raise a flag and the next play reopens the device.
     let make_callback = |flag: Arc<AtomicBool>| {
         move |err: rodio::cpal::StreamError| {
             eprintln!("[vesper] output stream error: {err}");
@@ -186,33 +191,36 @@ fn open_output_stream(device_lost: &Arc<AtomicBool>) -> Result<OutputStream, Str
         }
     };
 
-    // Fixed depth first - this is the whole point of the function. The order
-    // matters: trying `open_default_stream()` first would succeed with the
-    // shallower buffer and silently never apply the fix.
-    let fixed = OutputStreamBuilder::from_default_device().and_then(|b| {
-        b.with_buffer_size(rodio::cpal::BufferSize::Fixed(DEVICE_BUFFER_FRAMES))
-            .with_error_callback(make_callback(Arc::clone(device_lost)))
-            .open_stream()
-    });
+    // Walk the ladder deepest-first. The order matters: trying the default
+    // first would succeed with a ~10 ms buffer and quietly defeat the fix.
+    for &frames in DEVICE_BUFFER_LADDER.iter() {
+        let attempt = OutputStreamBuilder::from_default_device().and_then(|b| {
+            b.with_buffer_size(rodio::cpal::BufferSize::Fixed(frames))
+                .with_error_callback(make_callback(Arc::clone(device_lost)))
+                .open_stream()
+        });
 
-    let (stream, fell_back) = match fixed {
-        Ok(stream) => (Ok(stream), false),
-        // Some drivers - built-in laptop audio especially - refuse a fixed size.
-        // Let Windows choose again rather than leaving the user without sound,
-        // but record that it happened.
-        Err(_) => (
-            OutputStreamBuilder::from_default_device()
-                .map(|b| b.with_error_callback(make_callback(Arc::clone(device_lost))).open_stream())
-                .unwrap_or_else(|e| Err(e)),
-            true,
-        ),
-    };
+        if let Ok(stream) = attempt {
+            let (stream, info) = describe_stream(stream, frames, false);
+            record_stream_info(&info);
+            return Ok(stream);
+        }
+    }
 
-    let stream = stream.map_err(|e| format!("{e}"))?;
+    // Every fixed size was refused. Fall back to letting Windows choose, which
+    // is the pre-existing behaviour, but say so loudly instead of hiding it.
+    let stream = OutputStreamBuilder::from_default_device()
+        .map(|b| b.with_error_callback(make_callback(Arc::clone(device_lost))).open_stream())
+        .unwrap_or_else(|e| Err(e))
+        .map_err(|e| format!("{e}"))?;
 
-    // Read back the *negotiated* configuration. This is the ground truth: it
-    // reports what the device actually accepted, which may differ from what we
-    // asked for.
+    let (stream, info) = describe_stream(stream, 0, true);
+    record_stream_info(&info);
+    Ok(stream)
+}
+
+/// Build a `StreamInfo` from what the device actually negotiated.
+fn describe_stream(stream: OutputStream, requested_frames: u32, fell_back: bool) -> (OutputStream, StreamInfo) {
     let cfg = stream.config();
     let rate = cfg.sample_rate();
     let accepted = match *cfg.buffer_size() {
@@ -220,28 +228,27 @@ fn open_output_stream(device_lost: &Arc<AtomicBool>) -> Result<OutputStream, Str
             "fixed({frames} frames, ~{:.0} ms)",
             frames as f64 * 1000.0 / rate.max(1) as f64
         ),
-        rodio::cpal::BufferSize::Default => {
-            "default (Windows-chosen, usually ~10 ms)".to_string()
-        }
+        rodio::cpal::BufferSize::Default => "default (Windows-chosen, usually ~10 ms)".to_string(),
     };
-
     let info = StreamInfo {
         device: device_name(),
         sample_rate: rate,
         channels: cfg.channel_count(),
-        requested_frames: DEVICE_BUFFER_FRAMES,
+        requested_frames,
         accepted,
         fell_back,
     };
+    (stream, info)
+}
 
+/// Publish the negotiated audio config to the UI, stderr and `audio.log`.
+fn record_stream_info(info: &StreamInfo) {
     eprintln!(
         "[vesper] audio device: {} | {} Hz | {} ch | buffer: {} | fell_back={}",
         info.device, info.sample_rate, info.channels, info.accepted, info.fell_back
     );
     *stream_info().lock() = info.clone();
     log_stream_info(&info);
-
-    Ok(stream)
 }
 
 /// Best-effort output device name, for the diagnostics report.
