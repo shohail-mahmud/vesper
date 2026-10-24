@@ -270,6 +270,8 @@ pub fn run() {
             commands::open_external,
             commands::open_path,
             commands::open_data_folder,
+            set_playlist_cover,
+            remove_playlist_cover,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Vesper");
