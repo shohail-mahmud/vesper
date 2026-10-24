@@ -10,6 +10,7 @@ import {
   selectors,
   setVolume,
   setWidget,
+  startWindowDrag,
   toggleMute,
   togglePlay,
   useApp,
@@ -29,6 +30,34 @@ export function Widget({ mode }: WidgetProps) {
   const compact = widget.size === "compact";
   const barRef = useRef<HTMLDivElement | null>(null);
   const [scrub, setScrub] = useState<number | null>(null);
+
+  // ---- Cover-widget dragging -------------------------------------------
+  // A tap must toggle playback and a drag must move the window, on the same
+  // surface. Tauri's `data-tauri-drag-region` cannot do both: its handler
+  // preventDefaults and swallows the gesture, so the artwork swallowed every
+  // click (and a double-click was turned into a maximise attempt). Here the
+  // press is only promoted to a drag after the pointer travels past a small
+  // threshold, and the click that follows a drag is suppressed.
+  const dragOrigin = useRef<{ x: number; y: number } | null>(null);
+  const suppressClickUntil = useRef(0);
+
+  const beginDrag = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    dragOrigin.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const trackDrag = (e: React.PointerEvent) => {
+    const origin = dragOrigin.current;
+    if (!origin) return;
+    if (Math.hypot(e.clientX - origin.x, e.clientY - origin.y) < 4) return;
+    dragOrigin.current = null;
+    suppressClickUntil.current = Date.now() + 700;
+    void startWindowDrag();
+  };
+
+  const endDrag = () => {
+    dragOrigin.current = null;
+  };
 
   const duration = playback.duration || track?.duration || 0;
   const shown = scrub ?? playback.position;
@@ -64,36 +93,73 @@ export function Widget({ mode }: WidgetProps) {
           setVolume(playback.volume + step);
         }}
       >
-        <div
-          data-tauri-drag-region
-          className="flex select-none flex-col items-center"
-          style={{ width: artSize }}
-        >
-          <button
-            type="button"
-            data-tauri-drag-region
-            onClick={() => void togglePlay()}
-            onDoubleClick={() => void openMainWindow()}
-            title={playing ? "Pause · double-click to open Vesper" : "Play · double-click to open Vesper"}
-            aria-label={playing ? "Pause" : "Play"}
-            className="block cursor-pointer overflow-hidden bg-[rgba(10,10,14,0.55)]"
-            style={{ width: artSize, height: artSize }}
-          >
-            {artwork ? (
-              <img
-                src={artwork}
-                alt=""
-                draggable={false}
-                className="pointer-events-none h-full w-full object-cover"
-              />
-            ) : (
-              <span className="flex h-full w-full items-center justify-center text-white/50">
-                <I.NoteSingle size={compact ? 44 : 56} />
-              </span>
-            )}
-          </button>
+        <div className="flex select-none flex-col items-center" style={{ width: artSize }}>
+          {/* Artwork + hover controls. `group` drives the reveal; the buttons are
+              siblings of the art (not children) so they never sit inside a
+              <button> and never inherit the tap-to-pause handler. */}
+          <div className="group relative" style={{ width: artSize, height: artSize }}>
+            <button
+              type="button"
+              onPointerDown={beginDrag}
+              onPointerMove={trackDrag}
+              onPointerUp={endDrag}
+              onPointerCancel={endDrag}
+              onClick={() => {
+                if (Date.now() < suppressClickUntil.current) return;
+                void togglePlay();
+              }}
+              onDoubleClick={() => void openMainWindow()}
+              title={playing ? "Pause · double-click to open Vesper" : "Play · double-click to open Vesper"}
+              aria-label={playing ? "Pause" : "Play"}
+              className="block h-full w-full cursor-pointer overflow-hidden bg-[rgba(10,10,14,0.55)]"
+            >
+              {artwork ? (
+                <img
+                  src={artwork}
+                  alt=""
+                  draggable={false}
+                  className="pointer-events-none h-full w-full object-cover"
+                />
+              ) : (
+                <span className="pointer-events-none flex h-full w-full items-center justify-center text-white/50">
+                  <I.NoteSingle size={compact ? 44 : 56} />
+                </span>
+              )}
+            </button>
 
-          {/* Two pure text lines — no background, no shadow, no outline. */}
+            {mode !== "preview" && (
+              <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+                <button
+                  type="button"
+                  onClick={() => setWidget({ alwaysOnTop: !widget.alwaysOnTop })}
+                  aria-pressed={widget.alwaysOnTop}
+                  title={widget.alwaysOnTop ? "Pinned on top of other windows" : "Pin on top of other windows"}
+                  aria-label="Toggle always on top"
+                  className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-full backdrop-blur-sm transition-colors ${
+                    widget.alwaysOnTop
+                      ? "bg-white text-[#141418] hover:bg-white/88"
+                      : "bg-black/55 text-white hover:bg-black/78"
+                  }`}
+                >
+                  <I.Pin size={13} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => closeWidget()}
+                  title="Close widget"
+                  aria-label="Close widget"
+                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm transition-colors hover:bg-[#c0392b]"
+                >
+                  <I.X size={13} />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Two pure text lines — no background, no shadow, no outline.
+              These keep the drag region so the widget can always be moved,
+              even if the artwork drag is ever unavailable. */}
           <div
             data-tauri-drag-region
             className={`mt-[13px] w-full text-center leading-tight ${compact ? "text-[13.5px]" : "text-[15px]"}`}
