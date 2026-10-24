@@ -119,6 +119,11 @@ pub struct UserPlaylist {
     pub name: String,
     pub track_ids: Vec<String>,
     pub created_at: u64,
+    /// Custom cover for the playlist itself. Cached under
+    /// `%LOCALAPPDATA%\Vesper\artwork\custom-pl-*`. Defaulted so snapshots
+    /// written before playlist covers existed still deserialize.
+    #[serde(default)]
+    pub artwork: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
