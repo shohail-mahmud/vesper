@@ -323,7 +323,7 @@ export function PlayerBar() {
               aria-pressed={drawer === "queue"}
               aria-label="Play Queue"
               title="Up Next Queue (Q)"
-              className={`icon-btn h-7 w-7 ${drawer === "queue" ? "bg-paper-2 text-ink shadow-xs" : ""}`}
+              className={`icon-btn h-7 w-7 ${drawer === "queue" ? "bg-ink text-paper shadow-xs" : ""}`}
             >
               <I.Queue size={14} />
             </button>
@@ -334,7 +334,7 @@ export function PlayerBar() {
               aria-pressed={widget.visible}
               aria-label="Toggle round desktop mini-player"
               title="Toggle round floating desktop widget"
-              className={`icon-btn h-7 w-7 ${widget.visible ? "bg-paper-2 text-ink shadow-xs" : ""}`}
+              className={`icon-btn h-7 w-7 ${widget.visible ? "bg-ink text-paper shadow-xs" : ""}`}
             >
               <I.Panel size={14} />
             </button>
