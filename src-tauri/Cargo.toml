@@ -3,8 +3,7 @@ name = "vesper"
 version = "0.4.0"
 description = "Minimalist local music player for Windows with custom covers, native EQ, synced lyrics, and round desktop widget."
 authors = ["Shohail Mahmud"]
-license = "MIT"
-edition = "2021"
+license = "Custom"
 rust-version = "1.77"
 
 [lib]
@@ -22,6 +21,16 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 rodio = { version = "0.21", default-features = true, features = ["symphonia-all"] }
+
+# Registers the audio callback thread with MMCSS (Multimedia Class Scheduler
+# Service) via AvSetMmThreadCharacteristics, instead of cpal's default
+# SetThreadPriority(TIME_CRITICAL). MMCSS is the Windows subsystem built to keep
+# audio alive while the machine is being used - it is what Windows' own media
+# players register with, and it is why they survive keystrokes, window switches,
+# GPU work and network driver interrupts that preempt a plain TIME_CRITICAL
+# thread. Listed here as a direct dependency only to switch the feature on:
+# Cargo unifies features, so rodio's copy of cpal gets it too.
+cpal = { version = "0.16", features = ["audio_thread_priority"] }
 lofty = "0.21"
 walkdir = "2"
 dirs = "5"
