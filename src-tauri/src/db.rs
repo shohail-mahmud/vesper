@@ -122,10 +122,34 @@ impl Database {
             "ALTER TABLE tracks ADD COLUMN last_played_at INTEGER",
             "ALTER TABLE playback ADD COLUMN speed REAL NOT NULL DEFAULT 1.0",
             "ALTER TABLE playback ADD COLUMN eq_json TEXT",
+            "ALTER TABLE user_playlists ADD COLUMN artwork TEXT",
         ] {
             let _ = self.conn.execute(alter, []);
         }
         Ok(())
+    }
+
+    /// Sets or clears a user playlist's cover and returns the previous path so
+    /// the caller can delete the stale file.
+    pub fn set_playlist_artwork(
+        &self,
+        playlist_id: &str,
+        artwork: Option<&str>,
+    ) -> Result<Option<String>> {
+        let prev: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT artwork FROM user_playlists WHERE id = ?1",
+                params![playlist_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+        self.conn.execute(
+            "UPDATE user_playlists SET artwork = ?2 WHERE id = ?1",
+            params![playlist_id, artwork],
+        )?;
+        Ok(prev)
     }
 
     /// Immediately updates a single track's cover art & custom_artwork flag in SQLite.
@@ -267,7 +291,7 @@ impl Database {
 
         let playlists: Vec<UserPlaylist> = {
             let mut stmt = self.conn.prepare(
-                "SELECT id, name, created_at FROM user_playlists ORDER BY created_at ASC",
+                "SELECT id, name, created_at, artwork FROM user_playlists ORDER BY created_at ASC",
             )?;
             let mut list: Vec<UserPlaylist> = stmt
                 .query_map([], |row| {
@@ -276,6 +300,7 @@ impl Database {
                         name: row.get(1)?,
                         created_at: row.get::<_, i64>(2)? as u64,
                         track_ids: Vec::new(),
+                        artwork: row.get(3)?,
                     })
                 })?
                 .filter_map(|r| r.ok())
@@ -446,8 +471,8 @@ impl Database {
 
         for pl in &snapshot.library.playlists {
             tx.execute(
-                "INSERT INTO user_playlists (id, name, created_at) VALUES (?1, ?2, ?3)",
-                params![pl.id, pl.name, pl.created_at as i64],
+                "INSERT INTO user_playlists (id, name, created_at, artwork) VALUES (?1, ?2, ?3, ?4)",
+                params![pl.id, pl.name, pl.created_at as i64, pl.artwork.as_deref()],
             )?;
             for (position, track_id) in pl.track_ids.iter().enumerate() {
                 tx.execute(
