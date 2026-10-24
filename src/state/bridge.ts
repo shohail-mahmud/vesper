@@ -26,6 +26,30 @@ export async function nativeInvoke<T>(command: string, args?: Record<string, unk
   return internals.invoke(command, args) as Promise<T>;
 }
 
+/**
+ * Start an OS-level window drag for the window that owns the DOM that called this.
+ *
+ * This is the same command Tauri's own `data-tauri-drag-region` handler invokes
+ * (`plugin:window|start_dragging`, see tauri/src/window/scripts/drag.js), so the
+ * `core:window:allow-start-dragging` capability already covers it.
+ *
+ * The reason to call it by hand instead of using the attribute: a bare
+ * `data-tauri-drag-region` only starts a drag when the *exact* element carrying
+ * the attribute is the event target, and Tauri's handler calls
+ * `preventDefault()` + swallows the gesture. On the cover widget that meant the
+ * artwork could not be both draggable and clickable - the drag ate the click.
+ * With a threshold in JS, a tap stays a tap and a drag becomes a drag.
+ */
+export async function startWindowDrag(): Promise<void> {
+  const internals = (window as any).__TAURI_INTERNALS__;
+  if (!internals?.invoke) return;
+  try {
+    await internals.invoke("plugin:window|start_dragging");
+  } catch {
+    /* not fatal - the widget can still be moved by its title lines */
+  }
+}
+
 export async function nativeListen<T>(event: string, handler: (payload: T) => void): Promise<Unlisten> {
   const tauri = (window as any).__TAURI__;
   if (tauri?.event?.listen) {
