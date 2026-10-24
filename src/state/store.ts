@@ -47,8 +47,11 @@ import {
   resolveArtworkUrl,
   runtime,
   saveSnapshot,
+  startWindowDrag,
   type PickedFile,
 } from "./bridge";
+
+export { startWindowDrag };
 
 export type View =
   | { name: "home" }
