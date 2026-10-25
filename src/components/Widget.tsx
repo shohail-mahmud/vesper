@@ -312,9 +312,9 @@ export function Widget({ mode }: WidgetProps) {
                 type="button"
                 onClick={() => void togglePlay()}
                 aria-label={playing ? "Pause" : "Play"}
-                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[10px] bg-white text-[#141418] transition-transform hover:scale-[1.04] active:scale-[0.97]"
+                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-white text-[#141418] transition-transform hover:scale-[1.06] active:scale-[0.96]"
               >
-                {playing ? <I.Pause size={15} /> : <I.Play size={15} className="translate-x-[0.5px]" />}
+                {playing ? <I.Pause size={15} /> : <I.Play size={15} />}
               </button>
 
               <button
