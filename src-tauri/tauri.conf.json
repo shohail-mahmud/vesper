@@ -96,7 +96,10 @@
         "languages": [
           "English"
         ],
-        "installerHooks": "./windows/hooks.nsh"
+        "installerHooks": "./windows/hooks.nsh",
+        "headerImage": "./windows/installer-header.bmp",
+        "sidebarImage": "./windows/installer-sidebar.bmp",
+        "uninstallerHeaderImage": "./windows/installer-header.bmp"
       },
       "wix": {
         "language": "en-US"
