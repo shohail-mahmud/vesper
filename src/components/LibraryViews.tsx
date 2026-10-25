@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import {
   applyEqPreset,
+  choosePlaylistCover,
+  clearPlaylistCover,
   createPlaylist,
   deleteUserPlaylist,
   jumpToQueueIndex,
@@ -87,14 +89,14 @@ export function AllTracksScreen({ favoritesOnly = false }: { favoritesOnly?: boo
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center rounded-[6px] border border-rule bg-paper-2 p-0.5 text-[11.5px]">
+          <div className={`flex items-center rounded-[8px] border border-rule bg-paper-2 p-0.5 text-[11.5px] ${tracks.length === 0 ? "hidden" : ""}`}>
             {(["title", "artist", "album", "duration"] as SortField[]).map((f) => (
               <button
                 key={f}
                 type="button"
                 onClick={() => toggleSort(f)}
                 className={`rounded-[4px] px-2.5 py-1 capitalize transition-colors ${
-                  sortBy === f ? "bg-ink text-paper" : "text-ink-2 hover:text-ink"
+                  sortBy === f ? "bg-accent text-accent-on" : "text-ink-2 hover:text-ink"
                 }`}
               >
                 {f} {sortBy === f ? (asc ? "↑" : "↓") : ""}
@@ -120,11 +122,19 @@ export function AllTracksScreen({ favoritesOnly = false }: { favoritesOnly?: boo
         onPlay={(index) => void playFromList(tracks, index, state.playback.shuffle)}
         onRemove={favoritesOnly ? undefined : (track) => removeTrack(track.id)}
         emptyState={
-          <p className="text-[13px] text-ink-2">
-            {favoritesOnly
-              ? "No favorite tracks yet — click the heart icon on any track to save it here."
-              : "No tracks imported yet — use the Import Music tile on Home to add folders or audio files."}
-          </p>
+          <div className="flex flex-col items-center gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-accent-soft text-accent">
+              {favoritesOnly ? <I.HeartFilled size={19} /> : <I.Music size={19} />}
+            </span>
+            <p className="max-w-[46ch] text-[13px] font-medium text-ink">
+              {favoritesOnly ? "No favorites yet" : "No tracks imported yet"}
+            </p>
+            <p className="max-w-[46ch] text-[12px] leading-relaxed text-ink-3">
+              {favoritesOnly
+                ? "Click the heart on any track to keep it here."
+                : "Use the Import Music tile on Home to add folders or audio files."}
+            </p>
+          </div>
         }
       />
     </div>
@@ -317,6 +327,68 @@ export function ArtistsScreen() {
  * Custom User Playlist Screen
  * ------------------------------------------------------------------ */
 
+/**
+ * Playlist cover slot.
+ *
+ * With a custom cover the image fills the tile and hover reveals "Change" and
+ * "Remove". Without one, the tile shows a generated gradient with the playlist
+ * initial and reveals "Add cover" — so the affordance is discoverable without a
+ * permanent button competing with Play All / Shuffle / Delete.
+ */
+function PlaylistCover({
+  playlistId,
+  name,
+  trackCount,
+}: {
+  playlistId: string;
+  name: string;
+  trackCount: number;
+}) {
+  const state = useApp();
+  const pl = state.library.playlists.find((p) => p.id === playlistId);
+  const art = selectors.playlistArtworkFor(pl);
+  const initial = (name.trim()[0] ?? "?").toUpperCase();
+
+  return (
+    <div className="group relative h-[76px] w-[76px] shrink-0 overflow-hidden rounded-[13px] border border-rule-soft bg-paper-2">
+      {art ? (
+        <img src={art} alt="" className="h-full w-full object-cover" draggable={false} />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(140deg,var(--accent-soft),transparent_70%)]">
+          <span className="text-[26px] font-semibold tracking-tight text-accent/70">{initial}</span>
+        </div>
+      )}
+
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/55 opacity-0 backdrop-blur-[1px] transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+        <button
+          type="button"
+          onClick={() => void choosePlaylistCover(playlistId)}
+          title={art ? "Change cover" : "Add cover"}
+          aria-label={art ? "Change playlist cover" : "Add playlist cover"}
+          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-white/92 text-[#141418] transition-colors hover:bg-white"
+        >
+          <I.ImagePlus size={12} />
+        </button>
+        {art ? (
+          <button
+            type="button"
+            onClick={() => void clearPlaylistCover(playlistId)}
+            title="Remove cover"
+            aria-label="Remove playlist cover"
+            className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-white/92 text-[#141418] transition-colors hover:bg-[#c0392b] hover:text-white"
+          >
+            <I.ImageOff size={12} />
+          </button>
+        ) : (
+          <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-white/85">
+            {trackCount > 0 ? "Add cover" : ""}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function UserPlaylistScreen({ playlistId }: { playlistId: string }) {
   const state = useApp();
   const pl = selectors.playlistById(playlistId);
@@ -347,7 +419,9 @@ export function UserPlaylistScreen({ playlistId }: { playlistId: string }) {
       </button>
 
       <div className="mt-5 mb-7 flex flex-wrap items-end justify-between gap-4 border-b border-rule pb-5">
-        <div>
+        <div className="flex min-w-0 items-end gap-4">
+          <PlaylistCover playlistId={pl.id} name={pl.name} trackCount={tracks.length} />
+          <div className="min-w-0">
           <span className="plate text-ink-3">Custom playlist</span>
           {editing ? (
             <input
@@ -379,6 +453,7 @@ export function UserPlaylistScreen({ playlistId }: { playlistId: string }) {
             </h1>
           )}
           <p className="mt-1 text-[12px] text-ink-3">{formatCount(tracks.length, "track")}</p>
+          </div>
         </div>
 
         <div className="flex gap-2">
@@ -454,7 +529,7 @@ export function InspectorDrawer() {
                 if (drawer !== id) setDrawer(id);
               }}
               className={`rounded-[5px] px-2.5 py-1 text-[12px] font-medium transition-colors ${
-                drawer === id ? "bg-ink text-paper" : "text-ink-2 hover:text-ink"
+                drawer === id ? "bg-accent text-accent-on" : "text-ink-2 hover:text-ink"
               }`}
             >
               {label}
@@ -762,7 +837,7 @@ export function InspectorDrawer() {
                       <div className="pointer-events-none relative h-full w-[5px] rounded-full bg-ink/12">
                         <div
                           className={`absolute right-0 left-0 rounded-full ${
-                            playback.eq.enabled ? "bg-[var(--tile-outline)]" : "bg-ink/35"
+                            playback.eq.enabled ? "bg-accent-ink" : "bg-ink/30"
                           }`}
                           style={{
                             bottom: `${fillBottom}%`,
@@ -773,7 +848,7 @@ export function InspectorDrawer() {
 
                       {/* Thumb handle */}
                       <span
-                        className={`pointer-events-none absolute h-3 w-3 translate-y-1/2 rounded-full border-[1.5px] shadow-xs transition-transform group-hover:scale-110 ${
+                        className={`pointer-events-none absolute h-3 w-3 translate-y-1/2 rounded-full border-[1.5px] transition-transform group-hover:scale-110 ${
                           playback.eq.enabled
                             ? "border-[var(--tile-outline)] bg-paper-2"
                             : "border-ink/40 bg-paper-2"
