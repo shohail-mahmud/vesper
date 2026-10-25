@@ -608,6 +608,7 @@ mod tests {
                     name: "Late Night".into(),
                     track_ids: vec!["t1".into()],
                     created_at: 100,
+                    artwork: None,
                 }],
             },
             settings: Settings::default(),
