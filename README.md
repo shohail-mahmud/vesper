@@ -1,104 +1,114 @@
-# Vesper
+<p align="center">
+  <img src="src-tauri/icons/256x256.png" width="112" height="112" alt="Vesper logo">
+</p>
 
-**Your music. Your machine. Nothing else.**
+<h1 align="center">Vesper</h1>
 
-Vesper is a music player for Windows that plays the songs already on your computer — no account to create, no subscription, no internet connection required. Import your folders once and everything is there every time you open it.
+<p align="center"><b>Your music. Your machine. Nothing else.</b></p>
+
+<p align="center">
+A small, honest music player for Windows that plays the files already on your computer.<br>
+No account, no subscription, no cloud, no network requests.
+</p>
 
 ---
 
-## The little player that floats on your desktop
+## What it is
 
-Keep the music in sight without keeping the whole app open. Vesper's widget sits on your desktop like a small, always-there remote — over your wallpaper, above other windows if you want, synced with whatever is playing.
+Vesper is a local music player. It reads the audio files you already own and keeps them where they are. Nothing is uploaded, nothing is synced, nothing is indexed by anyone but you.
+
+The whole player is a native Rust core wrapped in a compact interface, which is why it opens instantly and stays out of the way while it plays. The fonts, the icons and the engine all ship inside the app, so the internet cable can stay unplugged.
+
+---
+
+## The floating widget
+
+<p align="center"><i>A second, much smaller player that lives on the desktop.</i></p>
 
 <table>
 <tr>
 <td width="50%" align="center">
 <img src="docs/screenshots/widget-pill.png" alt="Vesper pill widget" width="440"><br>
-<b>Pill</b> — artwork, controls, progress bar and time
+<b>Pill</b><br>
+Artwork, transport controls, a progress bar and the timecodes.
 </td>
 <td width="50%" align="center">
 <img src="docs/screenshots/widget-cover.png" alt="Vesper cover widget" width="400"><br>
-<b>Cover</b> — just the album art and the song name
+<b>Cover</b><br>
+Album art, song title and artist, and nothing else.
 </td>
 </tr>
 </table>
 
-Pick whichever you like in **Settings → Widget**. Switching is instant — the widget reshapes itself, no restart.
+The widget sits on the wallpaper like a small remote control that is always within reach, and it can stay above other windows or sit behind them. It shares one playback engine with the main window, so the two never fall out of step.
 
-- Click the artwork to **play or pause**. Double-click it to open your full library.
-- Keep it **on top of other windows**, or let it sit behind them.
-- Make it **see-through**, or let clicks pass straight through to your desktop.
-- Choose **compact** or **expanded** to match how much space you want to give it.
+Two shapes, compact and expanded. Opacity is adjustable down to a ghost, and clicks can pass straight through to the desktop underneath.
 
 ---
 
-## What you can do
+## Features
 
-### Build your library
-- **Import a folder** and Vesper remembers it as a playlist you can come back to — including new songs you add to it later.
-- **Import single songs** if you don't want a whole folder added.
-- **Drag and drop** files or entire folders onto the window. Or just double-click any song in File Explorer and choose *Open with Vesper*.
-- **Find anything instantly** with `Ctrl + F` — no scrolling through hundreds of songs.
+**Library**
+Import folders or single files. Folder imports keep picking up new songs you drop in later. Drag and drop works anywhere in the window, and File Explorer can hand files straight to Vesper. Search finds anything in the library as you type.
 
-### Make it yours
-- **Give any song its own cover art.** Pick an image once and it stays, even after you restart.
-- **Rename and organise** your folder playlists however makes sense to you.
-- **Remove** anything from your library without ever touching the actual files on your disk.
+**Playback**
+A native audio engine with gapless queue handling, shuffle, repeat-all and repeat-one. Playback speed runs from 0.5× to 2.0× without the pitch drifting. Hardware media keys, Bluetooth headphone buttons and the Windows volume flyout all stay in sync with the app.
 
-### Listen the way you want
-- **10-band equalizer** with ten ready-made presets — Bass Boost, Vocal Clarity, Late Night Soft and more — plus a preamp so you can push it exactly as far as you like.
-- **Change the speed** from 0.5× to 2.0× without the pitch going weird.
-- **Synced lyrics** shown line by line, following the song. Click any line to jump straight to that moment.
-- **Queue, shuffle and repeat** — including repeat-one, and it all survives a restart.
-- **Hardware media keys** on your keyboard work, along with your Bluetooth headphones' play/pause button, and the Windows volume flyout shows the song and cover art.
-- Music keeps playing **smoothly while you browse, scroll or game** — no cracking, no stuttering.
+**Covers**
+Every song can carry its own artwork, and playlists can have a cover of their own. Covers survive restarts, get replaced cleanly when you pick a new one, and fall back to a generated tile when there is nothing to show.
 
-### Supported formats
+**Equalizer**
+Ten bands with a preamp and a set of ready-made presets, from Bass Boost to Late Night Soft. Settings persist per install.
+
+**Lyrics**
+Synced lyrics scroll line by line with the song. Any line can be clicked to jump to that moment.
+
+**Desktop widget**
+The floating player above, sharing the same engine, with optional artwork, progress bar, volume and adjustable opacity.
+
+**Formats**
 MP3, FLAC, WAV, M4A, AAC, OGG, Opus and AIFF.
 
 ---
 
-## Install
+## Under the hood
 
-1. Go to [**Releases**](../../releases/latest) and download `Vesper_<version>_x64-setup.exe`.
-2. Run it. That's it — there's no account screen and nothing to configure.
-
-> **Please use the `-setup.exe`.** The `.msi` installs the same app but leaves your library behind when you uninstall.
-
-### What your PC needs
-
-| Requirement | Detail |
+| Layer | Detail |
 | --- | --- |
-| **Windows** | 10 (version 1803 or newer) or Windows 11 |
-| **Type** | 64-bit |
+| Core | Rust, playing through rodio |
+| Shell | Tauri 2, no Electron runtime |
+| Interface | React 19 and TypeScript, bundled with Vite |
+| Storage | SQLite for the library, playlists, settings and covers |
+| Installer | Around 4 MB, WebView2 downloaded at install time |
 
-Windows 7 and 8 aren't supported — they're missing the browser engine Vesper runs on. Nothing can be done about that from a launcher or patch.
+There is no telemetry, no analytics and no update ping. The app makes no outbound requests of any kind.
 
 ---
 
-## Your files stay yours
+## Private by design
 
-Vesper only ever **reads** your music, and only ever reads the picture you choose as a cover. It copies what it needs into its own folder and never modifies, moves or deletes your originals.
+Vesper only reads. It never modifies, moves or deletes your audio files, and it only reads the image you deliberately choose as a cover. Anything it needs is copied into its own folder, separate from your music.
 
-Uninstalling Vesper removes everything it created — your library, playlists, settings and saved covers — so the next install starts completely clean. Your music files are exactly where you left them.
+Uninstalling removes everything Vesper created, so a fresh install starts clean. Your music stays exactly where you left it.
 
 ---
 
-## Keyboard shortcuts
+## Platform
 
-| Shortcut | What it does |
-| --- | --- |
-| `Space` | Play / pause |
-| `←` `→` | Skip back / forward 5 seconds |
-| `Shift + ←` `Shift + →` | Previous / next song |
-| `Ctrl + F` | Search your library |
-| `S` | Shuffle on / off |
-| `R` | Repeat: off → all → one song |
-| `M` | Mute |
-| `Q` | Show the up-next queue |
-| `L` | Show lyrics |
-| `E` | Show the equalizer |
-| `W` | Show or hide the desktop widget |
+Windows 10 version 1803 or newer, and Windows 11. 64-bit only.
+
+Windows 7 and 8 are not supported. They are missing the browser engine the interface runs on, and no launcher or patch can add it.
+
+---
+
+## Credits
+
+| Typeface | Role | Author | Licence |
+| --- | --- | --- | --- |
+| Delight | Headings and the wordmark | [Rajesh Rajput](https://www.behance.net/rajputrajesh) | Freeware |
+| Open Sauce One | Interface and body text | [Alfredo Marco Pradil](https://github.com/marcologous/Open-Sauce-Fonts) | SIL OFL 1.1 |
+
+Both faces ship inside the app in `public/fonts`. The typeface credits also appear in Settings, under About.
 
 ---
 
@@ -106,13 +116,14 @@ Uninstalling Vesper removes everything it created — your library, playlists, s
 
 **Shohail Mahmud**
 
-- Instagram: [@shohailmahmud09](https://instagram.com/shohailmahmud09)
-- Email: <!-- TODO: put your Gmail address here, e.g. yourname@gmail.com -->
+Instagram: [@shohailmahmud09](https://instagram.com/shohailmahmud09)
 
-Found a bug, or want a feature? Message me on Instagram — that's the fastest way to reach me.
+Email: nirjonpc@gmail.com
+
+Bugs and feature requests are easiest to send there.
 
 ---
 
 ## License
 
-See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE) for the full text.
