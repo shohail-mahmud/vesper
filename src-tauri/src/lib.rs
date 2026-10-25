@@ -82,12 +82,93 @@ fn configure_windows_dwm(app: &tauri::AppHandle) {
 #[cfg(not(target_os = "windows"))]
 fn configure_windows_dwm(_app: &tauri::AppHandle) {}
 
+/// Size limits for the main window.
+///
+/// These mirror the `main` window block in tauri.conf.json. They live here as
+/// well because the fit below has to be able to lower the minimum when the
+/// screen itself is smaller than the minimum.
+const MAIN_PREFERRED_W: f64 = 1180.0;
+const MAIN_PREFERRED_H: f64 = 800.0;
+const MAIN_MIN_W: f64 = 840.0;
+const MAIN_MIN_H: f64 = 560.0;
+
+/// Gap between the window and the edges of the usable screen area.
+const SCREEN_MARGIN: f64 = 12.0;
+
+/// Absolute floor: below this the interface stops being usable at all, and a
+/// window smaller than it would be worse than a slightly clipped one.
+const ABSOLUTE_FLOOR_W: f64 = 640.0;
+const ABSOLUTE_FLOOR_H: f64 = 420.0;
+
+/// Keep the main window inside the usable area of the screen it opens on.
+///
+/// The configured size is 1180 x 800. A desktop monitor has room for that, but
+/// a 1366 x 768 laptop does not: Windows keeps roughly 40 px for the taskbar, so
+/// only about 728 px of height remains, the window hangs off the bottom and the
+/// player bar ends up under the taskbar.
+///
+/// Three things make this correct rather than approximate:
+///
+///  1. Work area, not screen size. `work_area()` already excludes the taskbar
+///     and any docked toolbars, which is exactly the space a normal window may
+///     occupy.
+///  2. Display scaling. Sizes are converted to logical pixels before comparing,
+///     because at 125 percent or 150 percent scaling the screen is far smaller
+///     in logical pixels than its resolution suggests, and the configured
+///     minimum of 840 x 560 can itself be larger than the whole screen.
+///  3. The minimum size is lowered first. A window whose minimum is bigger than
+///     the screen silently refuses to shrink, which is how a "fixed" window
+///     still ends up clipped. Lowering the minimum before resizing is what
+///     makes the fit actually happen at high DPI.
+///
+/// On a screen with room to spare this does nothing at all: the width and the
+/// height both stay at the configured values.
+fn fit_main_window_to_screen(app: &tauri::AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+
+    let scale = monitor.scale_factor();
+    if !scale.is_finite() || scale <= 0.0 {
+        return;
+    }
+
+    let work = monitor.work_area();
+    let avail_w = work.size.width as f64 / scale;
+    let avail_h = work.size.height as f64 / scale;
+    if !avail_w.is_finite() || !avail_h.is_finite() || avail_w < 1.0 || avail_h < 1.0 {
+        return;
+    }
+
+    // Space a window may occupy, minus a small breathing gap on each side.
+    let limit_w = (avail_w - SCREEN_MARGIN * 2.0).max(ABSOLUTE_FLOOR_W);
+    let limit_h = (avail_h - SCREEN_MARGIN * 2.0).max(ABSOLUTE_FLOOR_H);
+
+    // Never larger than the preferred size, never larger than the screen.
+    let width = MAIN_PREFERRED_W.min(limit_w);
+    let height = MAIN_PREFERRED_H.min(limit_h);
+
+    // Drop the minimum first when the screen cannot hold it, otherwise the
+    // resize below is ignored by the window manager.
+    let min_w = width.min(MAIN_MIN_W);
+    let min_h = height.min(MAIN_MIN_H);
+    let _ = window.set_min_size(Some(tauri::LogicalSize::new(min_w, min_h)));
+
+    let _ = window.set_size(tauri::LogicalSize::new(width, height));
+    let _ = window.center();
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             configure_windows_dwm(app.handle());
+            fit_main_window_to_screen(app.handle());
 
             let database = db::Database::open()?;
             let snapshot = database.load_snapshot().ok().flatten();
