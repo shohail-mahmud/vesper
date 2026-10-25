@@ -26,7 +26,8 @@
         "transparent": false,
         "shadow": true,
         "dragDropEnabled": true,
-        "visible": false
+        "visible": false,
+        "backgroundColor": "#f9ffe5"
       },
       {
         "label": "widget",
