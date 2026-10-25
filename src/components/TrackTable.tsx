@@ -51,8 +51,12 @@ export function TrackTable({
   const [newPlTitle, setNewPlTitle] = useState("");
 
   if (tracks.length === 0) {
+    // No table header is rendered when there are no rows, so nothing draws a
+    // rule and nothing reserves a row of height. The empty message sits in a
+    // dashed panel that matches the section cards instead of floating in a
+    // strip of blank paper.
     return (
-      <div className="border-t border-rule py-12 text-center">
+      <div className="mt-6 flex flex-col items-center justify-center rounded-[14px] border border-dashed border-rule px-6 py-16 text-center">
         {emptyState ?? <p className="text-[13px] text-ink-2">No tracks here yet.</p>}
       </div>
     );
@@ -191,7 +195,7 @@ export function TrackTable({
                     <div
                       role="menu"
                       onMouseLeave={() => setMenuTrackId(null)}
-                      className="rise absolute top-8 right-0 z-30 w-56 rounded-[12px] border-[1.5px] border-[var(--tile-outline)] bg-paper-2 p-1.5 text-left shadow-[0_14px_34px_rgba(0,0,0,0.16)]"
+                      className="rise absolute top-8 right-0 z-30 w-56 rounded-[12px] border-[1.5px] border-[var(--tile-outline)] bg-paper-2 p-1.5 text-left"
                     >
                       <button
                         type="button"
