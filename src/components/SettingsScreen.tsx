@@ -16,6 +16,8 @@ import * as I from "./Icons";
 /** Version comes from package.json at build time (vite.config.ts → `define`). */
 const APP_VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "0.0.0";
 const SOURCE_URL = "https://github.com/shohail-mahmud/vesper";
+const DELIGHT_URL = "https://www.behance.net/rajputrajesh";
+const OPEN_SAUCE_URL = "https://github.com/marcologous/Open-Sauce-Fonts";
 
 function Row({
   label,
@@ -27,7 +29,7 @@ function Row({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-8 border-b border-rule-soft py-4">
+    <div className="flex items-start justify-between gap-8 border-b border-rule-soft py-3.5 first:pt-0 last:border-b-0 last:pb-0">
       <div className="max-w-[54ch]">
         <div className="text-[13px] font-medium leading-tight text-ink">{label}</div>
         {description && <p className="mt-1 text-[11.5px] leading-relaxed text-ink-2">{description}</p>}
@@ -53,13 +55,13 @@ function Toggle({
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className={`relative h-[22px] w-[40px] cursor-pointer rounded-full border border-[var(--tile-outline)] transition-colors duration-150 ${
-        checked ? "bg-ink" : "bg-paper"
+      className={`relative h-[22px] w-[40px] cursor-pointer rounded-full border transition-colors duration-150 ${
+        checked ? "border-transparent bg-accent" : "border-rule bg-transparent"
       }`}
     >
       <span
         className={`absolute top-[2px] h-4 w-4 rounded-full transition-all duration-150 ${
-          checked ? "bg-paper" : "bg-ink"
+          checked ? "bg-accent-on" : "bg-ink-3"
         }`}
         style={{ left: checked ? 20 : 2 }}
       />
@@ -79,13 +81,17 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="grid grid-cols-1 gap-6 border-t border-rule pt-6 pb-8 lg:grid-cols-[210px_minmax(0,1fr)]">
-      <div>
+    /* Each section is its own panel. Previously the header column and the rows
+       shared one grid separated only by a hairline, so every section ended in a
+       tall block of nothing before the next rule - the "weird space". A panel
+       bounds the content, so padding is even on all four sides. */
+    <section className="grid grid-cols-1 gap-x-9 gap-y-4 rounded-[16px] border border-rule-soft bg-paper-2 p-5 lg:grid-cols-[190px_minmax(0,1fr)] lg:p-6">
+      <div className="lg:pt-0.5">
         <div className="plate text-ink-3">{index}</div>
-        <h2 className="mt-2 text-[17px] font-semibold tracking-tight text-ink">{title}</h2>
-        <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-2">{caption}</p>
+        <h2 className="mt-2 text-[16px] font-semibold tracking-[-0.015em] text-ink">{title}</h2>
+        <p className="mt-1.5 max-w-[42ch] text-[11.5px] leading-[1.6] text-ink-2">{caption}</p>
       </div>
-      <div>{children}</div>
+      <div className="min-w-0">{children}</div>
     </section>
   );
 }
@@ -101,7 +107,7 @@ export function SettingsScreen() {
   const playlistCount = library.playlists.length;
 
   return (
-    <div className="fade px-8 py-9 sm:px-11">
+    <div className="fade px-8 py-8 sm:px-11">
       <button
         type="button"
         className="plate flex cursor-pointer items-center gap-2 text-ink-3 transition-colors hover:text-ink"
@@ -110,7 +116,7 @@ export function SettingsScreen() {
         <I.ArrowLeft size={13} /> Home
       </button>
 
-      <header className="mt-5 mb-8">
+      <header className="mt-5 mb-7">
         <h1 className="text-[24px] font-semibold tracking-tight text-ink">Settings</h1>
         <p className="mt-1.5 max-w-[56ch] text-[12.5px] leading-relaxed text-ink-2">
           Preferences are persisted locally in SQLite on Windows and never leave your machine. Theme
@@ -118,6 +124,7 @@ export function SettingsScreen() {
         </p>
       </header>
 
+      <div className="flex flex-col gap-4">
       <Section
         index="01 / Widget"
         title="Floating desktop widget"
@@ -146,7 +153,7 @@ export function SettingsScreen() {
                 onClick={() => setWidget({ style })}
                 aria-pressed={(widget.style ?? "pill") === style}
                 className={`plate px-3.5 py-2 capitalize transition-colors ${
-                  (widget.style ?? "pill") === style ? "bg-ink text-paper" : "bg-paper-2 text-ink-2 hover:text-ink"
+                  (widget.style ?? "pill") === style ? "bg-accent text-accent-on" : "bg-paper-2 text-ink-2 hover:text-ink"
                 }`}
               >
                 {style}
@@ -170,7 +177,7 @@ export function SettingsScreen() {
                 onClick={() => setWidget({ size })}
                 aria-pressed={widget.size === size}
                 className={`plate px-3.5 py-2 transition-colors ${
-                  widget.size === size ? "bg-ink text-paper" : "bg-paper-2 text-ink-2 hover:text-ink"
+                  widget.size === size ? "bg-accent text-accent-on" : "bg-paper-2 text-ink-2 hover:text-ink"
                 }`}
               >
                 {size}
@@ -388,13 +395,13 @@ export function SettingsScreen() {
             </Row>
 
             <Row
-              label="Dropouts since launch"
+              label="Queue starvations"
               description={
                 diag
                   ? diag.underruns === 0
-                    ? "Zero — the audio callback has never run out of data, so any crackle you hear is not a buffer problem."
-                    : "Playback ran out of buffered audio this many times. A rising number means the device buffer is still too shallow for this machine."
-                  : "Hear a crackle? Check immediately after. A zero here points at something other than buffering."
+                    ? "Zero — Vesper's own queue never ran dry. This does NOT catch the device buffer emptying because a callback arrived late; that crackles without appearing here."
+                    : "Vesper's decoded queue ran empty this many times. A rising number means the thread is being starved hard enough to exhaust four seconds of prefetch."
+                  : "Hear a crackle? Check immediately after. Zero here means Vesper always had data ready — look at callback scheduling instead."
               }
             >
               <span className={diag && diag.underruns > 0 ? "plate text-warn" : "plate text-ink-3"}>
@@ -412,11 +419,11 @@ export function SettingsScreen() {
       </Section>
 
       <Section
-        index="04 / About"
+        index="05 / About"
         title="Vesper"
         caption="A small, honest music player that plays your own files."
       >
-        <div className="border-b border-rule-soft py-4">
+        <div className="border-b border-rule-soft pb-4">
           <div className="flex items-baseline gap-2.5">
             <span className="text-[15px] font-semibold tracking-tight text-ink">Vesper</span>
             <span className="plate rounded-[4px] border border-rule bg-paper-2 px-2 py-[3px] text-ink-2">
@@ -459,6 +466,46 @@ export function SettingsScreen() {
                 : "WebAudio + localStorage (browser preview)"}
             </dd>
           </dl>
+
+          {/* Typeface credits — attribution lives with the app, not a website. */}
+          <div className="mt-4 border-t border-rule-soft pt-3.5">
+            <p className="plate text-ink-3">Typefaces</p>
+            <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-2.5 text-[12px] sm:grid-cols-[132px_minmax(0,1fr)]">
+              <dt className="plate text-ink-3">Display</dt>
+              <dd className="text-ink-2">
+                <span className="font-display text-[13.5px] text-ink">Delight</span> — by{" "}
+                <button
+                  type="button"
+                  onClick={() => openExternalUrl(DELIGHT_URL)}
+                  title={DELIGHT_URL}
+                  className="inline-flex cursor-pointer items-center gap-1 border-b border-rule pb-[1px] text-ink transition-colors hover:border-ink"
+                >
+                  Rajesh Rajput
+                  <I.ExternalLink size={10} />
+                </button>
+                <span className="text-ink-3"> · freeware</span>
+              </dd>
+
+              <dt className="plate text-ink-3">UI text</dt>
+              <dd className="text-ink-2">
+                <span className="text-[13.5px] text-ink">Open Sauce One</span> — by{" "}
+                <button
+                  type="button"
+                  onClick={() => openExternalUrl(OPEN_SAUCE_URL)}
+                  title={OPEN_SAUCE_URL}
+                  className="inline-flex cursor-pointer items-center gap-1 border-b border-rule pb-[1px] text-ink transition-colors hover:border-ink"
+                >
+                  Alfredo Marco Pradil
+                  <I.ExternalLink size={10} />
+                </button>
+                <span className="text-ink-3"> · SIL OFL 1.1, Creative Sauce</span>
+              </dd>
+            </dl>
+            <p className="mt-2.5 max-w-[58ch] text-[11px] leading-relaxed text-ink-3">
+              Both faces ship inside the app in <span className="text-ink-2">public/fonts/</span> — there is no
+              web-font CDN and no request made when Vesper launches.
+            </p>
+          </div>
         </div>
 
         <p className="pt-4 text-[11px] leading-relaxed text-ink-3">
@@ -467,6 +514,7 @@ export function SettingsScreen() {
           home.
         </p>
       </Section>
+      </div>
     </div>
   );
 }
