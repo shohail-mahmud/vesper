@@ -55,7 +55,8 @@ function TopBar({ searchInputRef }: { searchInputRef: React.RefObject<HTMLInputE
 
   return (
     <header
-      className="relative z-20 flex h-12 shrink-0 select-none items-center justify-between gap-4 border-b-[1.5px] border-rule bg-paper-2 pl-4"
+      className="relative z-20 flex h-12 shrink-0 select-none items-center justify-between gap-4 border-b border-rule-soft pl-4 backdrop-blur-md"
+      style={{ background: "var(--topbar-bg)" }}
       data-tauri-drag-region
     >
       {/* Brand + Minimal Navigation */}
@@ -65,8 +66,8 @@ function TopBar({ searchInputRef }: { searchInputRef: React.RefObject<HTMLInputE
           onClick={() => setView({ name: "home" })}
           className="flex cursor-pointer items-center gap-2 text-ink"
         >
-          <I.Mark size={19} />
-          <span className="text-[13.5px] font-semibold tracking-tight">Vesper</span>
+          <I.Mark size={19} className="text-accent-ink" />
+          <span className="font-display text-[14.5px] tracking-tight">Vesper</span>
         </button>
 
         <nav aria-label="Primary" className="hidden items-center gap-1 sm:flex">
@@ -78,7 +79,7 @@ function TopBar({ searchInputRef }: { searchInputRef: React.RefObject<HTMLInputE
               aria-current={item.active ? "page" : undefined}
               className={`cursor-pointer rounded-[5px] px-2.5 py-1 text-[12.5px] font-medium transition-colors ${
                 item.active
-                  ? "bg-ink text-paper"
+                  ? "bg-accent text-accent-on"
                   : "text-ink-2 hover:bg-[var(--surface-hover)] hover:text-ink"
               }`}
             >
@@ -94,7 +95,7 @@ function TopBar({ searchInputRef }: { searchInputRef: React.RefObject<HTMLInputE
                 onClick={() => setView({ name: "userPlaylist", id: pl.id })}
                 className={`max-w-[120px] truncate-1 cursor-pointer rounded-[5px] px-2.5 py-1 text-[12px] font-medium transition-colors ${
                   active
-                    ? "bg-ink text-paper"
+                    ? "bg-accent text-accent-on"
                     : "text-ink-3 hover:bg-[var(--surface-hover)] hover:text-ink"
                 }`}
               >
@@ -145,7 +146,7 @@ function TopBar({ searchInputRef }: { searchInputRef: React.RefObject<HTMLInputE
           onClick={() => setView(view.name === "settings" ? { name: "home" } : { name: "settings" })}
           title="Settings"
           aria-label="Settings"
-          className={`icon-btn h-8 w-8 ${view.name === "settings" ? "!bg-ink !text-paper" : ""}`}
+          className={`icon-btn h-8 w-8 ${view.name === "settings" ? "!bg-accent !text-accent-on" : ""}`}
         >
           <I.Settings size={15} />
         </button>
@@ -206,7 +207,7 @@ function Toasts() {
         <div
           key={item.id}
           role="status"
-          className="rise pointer-events-auto flex items-start gap-3 rounded-[6px] border-[1.5px] border-[var(--tile-outline)] bg-paper-2 px-4 py-2.5 text-ink shadow-[0_14px_34px_rgba(0,0,0,0.16)]"
+          className="rise pointer-events-auto flex items-start gap-3 rounded-[6px] border-[1.5px] border-[var(--tile-outline)] bg-paper-2 px-4 py-2.5 text-ink"
         >
           <span className={`mt-[2px] ${item.tone === "error" ? "text-[#B4453A]" : "text-ink"}`}>
             {item.tone === "error" ? <I.Warning size={14} /> : <I.Check size={14} />}
