@@ -149,7 +149,7 @@ export function PlaylistScreen({ folderId }: { folderId: string }) {
             {menuOpen && (
               <div
                 role="menu"
-                className="rise absolute right-0 z-30 mt-1.5 w-60 overflow-hidden rounded-[6px] border-[1.5px] border-[var(--tile-outline)] bg-paper-2 shadow-[0_14px_34px_rgba(0,0,0,0.16)]"
+                className="rise absolute right-0 z-30 mt-1.5 w-60 overflow-hidden rounded-[6px] border-[1.5px] border-[var(--tile-outline)] bg-paper-2"
                 onMouseLeave={() => setMenuOpen(false)}
               >
                 {[
