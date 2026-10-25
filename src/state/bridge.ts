@@ -146,6 +146,8 @@ export interface NativeApi {
   widgetClose(): Promise<void>;
   widgetSetAlwaysOnTop(value: boolean): Promise<void>;
   widgetSetBounds(settings: WidgetSettings): Promise<void>;
+  setPlaylistCover(playlistId: string, imagePath: string): Promise<string>;
+  removePlaylistCover(playlistId: string): Promise<void>;
   openPath(path: string): Promise<void>;
   openDataFolder(): Promise<string>;
   audioDiagnostics(): Promise<AudioDiagnostics>;
@@ -209,6 +211,10 @@ export const native: NativeApi = {
   widgetClose: () => nativeInvoke("widget_close"),
   widgetSetAlwaysOnTop: (value) => nativeInvoke("widget_set_always_on_top", { value }),
   widgetSetBounds: (settings) => nativeInvoke("widget_set_bounds", { settings }),
+  setPlaylistCover: (playlistId, imagePath) =>
+    nativeInvoke<string>("set_playlist_cover", { playlistId, imagePath }),
+  removePlaylistCover: (playlistId) =>
+    nativeInvoke("remove_playlist_cover", { playlistId }),
   openPath: (path) => nativeInvoke("open_path", { path }),
   openDataFolder: () => nativeInvoke<string>("open_data_folder"),
   audioDiagnostics: () => nativeInvoke<AudioDiagnostics>("audio_diagnostics"),
