@@ -168,7 +168,15 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             configure_windows_dwm(app.handle());
+
+            // The main window is created hidden (see tauri.conf.json). Size it
+            // against the screen first, then reveal it, so the wrong size is
+            // never painted: no grow-then-shrink jump on launch.
             fit_main_window_to_screen(app.handle());
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
 
             let database = db::Database::open()?;
             let snapshot = database.load_snapshot().ok().flatten();
