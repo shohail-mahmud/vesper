@@ -3,8 +3,8 @@
 
    Display  : Delight (Regular) — headings, section titles, the wordmark.
    Support  : Open Sauce One — everything else (UI, body, numerals).
-   Open Sauce One is SIL OFL 1.1 and shipped in public/fonts at 400/500/600/700,
-   so the declared weights resolve to real cut weights instead of faux bold. */
+   Open Sauce One is SIL OFL 1.1. Only its Regular cut ships in public/fonts, so
+   weight 400 is declared and heavier UI text is synthesised by the browser. */
 @font-face {
   font-family: "Delight";
   font-style: normal;
@@ -20,32 +20,10 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  /* OpenSauceOne-Regular.ttf is the file in public/fonts/; woff2 is the
-     re-wrapped copy. 500/600/700 come from the same OFL family so bold labels
-     use a real cut instead of faux bold. */
-  src: url("/fonts/opensauceone-400.woff2") format("woff2"),
-       url("/fonts/OpenSauceOne-Regular.ttf") format("truetype");
-}
-@font-face {
-  font-family: "Open Sauce One";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url("/fonts/opensauceone-500.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Open Sauce One";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url("/fonts/opensauceone-600.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Open Sauce One";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/fonts/opensauceone-700.woff2") format("woff2");
+  /* Only files that actually exist in public/fonts/ are referenced. The CI
+     "Offline guarantee check" fails the build for any /fonts/ URL that does
+     not resolve to a real file in dist/, so no optional/extra weights here. */
+  src: url("/fonts/OpenSauceOne-Regular.ttf") format("truetype");
 }
 
 @import "tailwindcss";
