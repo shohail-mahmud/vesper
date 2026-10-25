@@ -66,7 +66,7 @@ export function PlayerBar() {
 
   return (
     <footer aria-label="Now playing" className="shrink-0 bg-paper px-4 pt-1.5 pb-3 select-none">
-      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-5 rounded-[22px] border-[1.5px] border-rule bg-paper-2 px-4 py-2.5 shadow-[0_8px_28px_rgba(0,0,0,0.06)]">
+      <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-5 rounded-[22px] border-[1.5px] border-rule bg-paper-2 px-4 py-2.5">
         {/* 1. Left: Interactive Cover Art + Song Title & Artist */}
         <div className="flex min-w-0 flex-1 items-center gap-3.5">
           <div ref={coverRef} className="relative shrink-0">
@@ -110,7 +110,7 @@ export function PlayerBar() {
             {coverMenuOpen && track && (
               <div
                 role="menu"
-                className="rise absolute bottom-[62px] left-0 z-50 w-44 overflow-hidden rounded-[12px] border-[1.5px] border-[var(--tile-outline)] bg-paper-2 p-1 shadow-[0_14px_34px_rgba(0,0,0,0.18)]"
+                className="rise absolute bottom-[62px] left-0 z-50 w-44 overflow-hidden rounded-[12px] border-[1.5px] border-[var(--tile-outline)] bg-paper-2 p-1"
               >
                 <button
                   type="button"
@@ -184,13 +184,10 @@ export function PlayerBar() {
               aria-label="Shuffle"
               title={playback.shuffle ? "Shuffle enabled" : "Shuffle off"}
               className={`icon-btn relative h-8 w-8 ${
-                playback.shuffle ? "bg-[var(--surface-hover)] text-ink" : "text-ink-3"
+                playback.shuffle ? "bg-accent-soft text-accent-ink" : "text-ink-3"
               }`}
             >
               <I.Shuffle size={15} />
-              {playback.shuffle && (
-                <span className="absolute bottom-1 h-1 w-1 rounded-full bg-ink" />
-              )}
             </button>
 
             <button
@@ -198,7 +195,7 @@ export function PlayerBar() {
               onClick={() => void previous()}
               aria-label="Previous track"
               title="Previous track"
-              className="icon-btn h-8 w-8 text-ink"
+              className="icon-btn h-8 w-8 text-accent-ink"
             >
               <I.Prev size={16} />
             </button>
@@ -208,9 +205,9 @@ export function PlayerBar() {
               onClick={() => void togglePlay()}
               aria-label={playing ? "Pause" : "Play"}
               title={playing ? "Pause (Space)" : "Play (Space)"}
-              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-[var(--tile-outline)] text-paper-2 shadow-sm transition-transform hover:scale-[1.04] active:scale-[0.97]"
+              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-accent text-accent-on transition-all hover:bg-accent-hover hover:scale-[1.04] active:scale-[0.97]"
             >
-              {playing ? <I.Pause size={18} /> : <I.Play size={18} className="translate-x-[1px]" />}
+              {playing ? <I.Pause size={18} /> : <I.Play size={18} />}
             </button>
 
             <button
@@ -218,7 +215,7 @@ export function PlayerBar() {
               onClick={() => void next()}
               aria-label="Next track"
               title="Next track"
-              className="icon-btn h-8 w-8 text-ink"
+              className="icon-btn h-8 w-8 text-accent-ink"
             >
               <I.Next size={16} />
             </button>
@@ -230,7 +227,7 @@ export function PlayerBar() {
               aria-label={`Repeat: ${playback.repeat}`}
               title={`Repeat: ${playback.repeat}`}
               className={`icon-btn relative h-8 w-8 ${
-                playback.repeat !== "off" ? "bg-[var(--surface-hover)] text-ink" : "text-ink-3"
+                playback.repeat !== "off" ? "bg-accent-soft text-accent-ink" : "text-ink-3"
               }`}
             >
               {playback.repeat === "one" ? <I.RepeatOne size={15} /> : <I.Repeat size={15} />}
@@ -271,13 +268,13 @@ export function PlayerBar() {
             >
               <div className="relative h-[5px] w-full overflow-hidden rounded-full bg-ink/12 transition-all group-hover:h-[6px]">
                 <div
-                  className="h-full rounded-full bg-[var(--tile-outline)] transition-[width] duration-75"
+                  className="h-full rounded-full bg-accent-ink transition-[width] duration-75"
                   style={{ width: `${progressPct}%` }}
                 />
               </div>
               {track && (
                 <span
-                  className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 rounded-full bg-[var(--tile-outline)] opacity-0 shadow transition-opacity group-hover:opacity-100"
+                  className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 rounded-full bg-accent-ink opacity-0 shadow transition-opacity group-hover:opacity-100"
                   style={{ left: `${progressPct}%` }}
                 />
               )}
@@ -291,14 +288,14 @@ export function PlayerBar() {
 
         {/* 3. Right: Clean Utility Pill Strip + Smooth Volume Bar */}
         <div className="flex flex-1 items-center justify-end gap-2">
-          <div className="flex items-center gap-0.5 rounded-full border border-rule-soft bg-paper px-1.5 py-1">
+          <div className="flex items-center gap-0.5 rounded-full border border-rule-soft bg-paper-2 px-1.5 py-1">
             <button
               type="button"
               onClick={() => setDrawer("lyrics")}
               aria-pressed={drawer === "lyrics"}
               aria-label="Lyrics panel"
               title="Synced Lyrics (L)"
-              className={`icon-btn h-7 w-7 ${drawer === "lyrics" ? "bg-paper-2 text-ink shadow-xs" : ""}`}
+              className={`icon-btn h-7 w-7 ${drawer === "lyrics" ? "bg-accent-soft text-accent-ink" : ""}`}
             >
               <I.Lyrics size={14} />
             </button>
@@ -309,11 +306,11 @@ export function PlayerBar() {
               aria-pressed={drawer === "eq"}
               aria-label="10-Band Equalizer"
               title="10-Band Equalizer (E)"
-              className={`icon-btn relative h-7 w-7 ${drawer === "eq" ? "bg-paper-2 text-ink shadow-xs" : ""}`}
+              className={`icon-btn relative h-7 w-7 ${drawer === "eq" ? "bg-accent-soft text-accent-ink" : ""}`}
             >
               <I.Sliders size={14} />
               {playback.eq.enabled && (
-                <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-ink" />
+                <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-accent-ink" />
               )}
             </button>
 
@@ -323,7 +320,7 @@ export function PlayerBar() {
               aria-pressed={drawer === "queue"}
               aria-label="Play Queue"
               title="Up Next Queue (Q)"
-              className={`icon-btn h-7 w-7 ${drawer === "queue" ? "bg-ink text-paper shadow-xs" : ""}`}
+              className={`icon-btn h-7 w-7 ${drawer === "queue" ? "bg-accent-soft text-accent-ink" : ""}`}
             >
               <I.Queue size={14} />
             </button>
@@ -332,9 +329,9 @@ export function PlayerBar() {
               type="button"
               onClick={() => setWidget({ visible: !widget.visible })}
               aria-pressed={widget.visible}
-              aria-label="Toggle round desktop mini-player"
+              aria-label="Toggle desktop mini-player"
               title="Toggle round floating desktop widget"
-              className={`icon-btn h-7 w-7 ${widget.visible ? "bg-ink text-paper shadow-xs" : ""}`}
+              className={`icon-btn h-7 w-7 ${widget.visible ? "bg-accent-soft text-accent-ink" : ""}`}
             >
               <I.Panel size={14} />
             </button>
@@ -374,12 +371,12 @@ export function PlayerBar() {
             >
               <div className="relative h-[5px] w-full overflow-hidden rounded-full bg-ink/12 transition-all group-hover:h-[6px]">
                 <div
-                  className="h-full rounded-full bg-[var(--tile-outline)]"
+                  className="h-full rounded-full bg-accent-ink"
                   style={{ width: `${volumePct}%` }}
                 />
               </div>
               <span
-                className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-[var(--tile-outline)] opacity-0 shadow transition-opacity group-hover:opacity-100"
+                className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-accent-ink opacity-0 shadow transition-opacity group-hover:opacity-100"
                 style={{ left: `${volumePct}%` }}
               />
             </div>
