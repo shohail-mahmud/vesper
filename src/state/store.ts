@@ -1070,6 +1070,62 @@ export function setTrackCoverData(trackId: string, artwork: string | undefined, 
   }
 }
 
+/** Applies a saved cover path to a playlist and persists immediately. */
+function setPlaylistCoverData(playlistId: string, artwork: string | null) {
+  setState(
+    {
+      library: {
+        ...state.library,
+        playlists: state.library.playlists.map((p) =>
+          p.id === playlistId ? { ...p, artwork } : p,
+        ),
+      },
+    },
+    true,
+  );
+  if (state.backend !== "native") {
+    void saveSnapshot(toSnapshot(state));
+  }
+}
+
+/** Opens the image picker and saves the chosen cover for this playlist. */
+export async function choosePlaylistCover(playlistId: string): Promise<void> {
+  const pl = state.library.playlists.find((p) => p.id === playlistId);
+  if (!pl) return;
+
+  if (state.backend === "native") {
+    try {
+      const picked = await native.pickCoverImage();
+      if (!picked) return;
+      const savedPath = await native.setPlaylistCover(playlistId, picked);
+      setPlaylistCoverData(playlistId, savedPath);
+      toast("success", "Playlist cover saved", "Saved permanently until you remove it.");
+    } catch (err) {
+      toast("error", "Could not save cover", err instanceof Error ? err.message : String(err));
+    }
+    return;
+  }
+
+  const dataUrl = await pickCoverDataUrlWeb();
+  if (!dataUrl) return;
+  setPlaylistCoverData(playlistId, dataUrl);
+  toast("success", "Playlist cover saved", "Saved until you remove it.");
+}
+
+/** Removes a playlist's custom cover. */
+export async function clearPlaylistCover(playlistId: string): Promise<void> {
+  if (state.backend === "native") {
+    try {
+      await native.removePlaylistCover(playlistId);
+    } catch (err) {
+      toast("error", "Could not remove cover", err instanceof Error ? err.message : String(err));
+      return;
+    }
+  }
+  setPlaylistCoverData(playlistId, null);
+  toast("success", "Playlist cover removed", "The playlist falls back to its generated artwork.");
+}
+
 /** Opens the image picker and permanently saves the chosen cover for this song. */
 export async function chooseTrackCover(trackId: string): Promise<void> {
   const track = state.library.tracks[trackId];
@@ -1861,4 +1917,6 @@ export const selectors = {
   },
   totalTracks: (): number => Object.keys(state.library.tracks).length,
   artworkFor: (track: Track | null): string | null => resolveArtworkUrl(track?.artwork),
+  playlistArtworkFor: (pl: UserPlaylist | null | undefined): string | null =>
+    resolveArtworkUrl(pl?.artwork ?? null),
 };
