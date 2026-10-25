@@ -96,34 +96,67 @@ function roundedPlate(x, y, size, radius) {
   return Math.hypot(ax, ay) + Math.min(Math.max(dx, dy), 0) - radius;
 }
 
-function distanceToSegment(px, py, ax, ay, bx, by) {
-  const vx = bx - ax;
-  const vy = by - ay;
-  const wx = px - ax;
-  const wy = py - ay;
-  const t = Math.min(1, Math.max(0, (wx * vx + wy * vy) / (vx * vx + vy * vy)));
-  return Math.hypot(px - (ax + t * vx), py - (ay + t * vy));
+/**
+ * The Vesper mark, sampled as an implicit surface.
+ *
+ * Geometry mirrors `Mark` in src/components/Icons.tsx: seven symmetric rounded
+ * bars on a 24-unit grid, scaled 512/24 so the two stay in step. The four-point
+ * spark is an astroid (|x|^p + |y|^p <= 1 for p < 1), which gives the concave
+ * arms a plain rotated square can't.
+ */
+const UNIT = 512 / 24;
+const CENTRE = 256;
+
+function roundedBar(x, y, cx, height, width, radius) {
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const dx = Math.abs(x - cx) - (halfW - radius);
+  const dy = Math.abs(y - CENTRE) - (halfH - radius);
+  const ax = Math.max(dx, 0);
+  const ay = Math.max(dy, 0);
+  return Math.hypot(ax, ay) + Math.min(Math.max(dx, dy), 0) - radius;
 }
 
 function sample512(x, y) {
-  const S = 512;
-  const plateDist = roundedPlate(x, y, S, 108);
+  const plateDist = roundedPlate(x, y, 512, 112);
   if (plateDist > 0) return null;
 
-  const rim = plateDist > -14;
-  let r = rim ? 48 : 24;
-  let g = rim ? 48 : 24;
-  let b = rim ? 54 : 28;
+  // Plate: near-black with a slightly lifted rim, so the icon still separates
+  // from a dark taskbar. Glyph: white.
+  const rim = plateDist > -12;
+  let r = rim ? 42 : 20;
+  let g = rim ? 38 : 17;
+  let b = rim ? 52 : 23;
 
-  const halfStroke = 21;
-  const left = distanceToSegment(x, y, 152, 150, 256, 336) - halfStroke;
-  const right = distanceToSegment(x, y, 256, 336, 360, 150) - halfStroke;
-  const dot = Math.hypot(x - 256, y - 398) - 22;
+  const W = 1.5 * UNIT; // bar width
+  const half = W / 2;
+  const step = (14.55 - 12) * UNIT; // spacing between bar centres
+  const bars = [
+    [0, 13.2],    // centre bar
+    [1, 9.6],
+    [2, 5.7],
+    [3, 2.7],
+  ];
+  let inGlyph = false;
+  for (const [k, h] of bars) {
+    const height = h * UNIT;
+    const offsets = k === 0 ? [0] : [-k * step, k * step];
+    for (const off of offsets) {
+      if (roundedBar(x, y, CENTRE + off, height, W, half) <= 0) inGlyph = true;
+    }
+  }
 
-  if (Math.min(left, right, dot) <= 0) {
-    r = 250;
-    g = 250;
-    b = 249;
+  // Astroid spark. R is deliberately small enough that all four cusps land
+  // inside a bar: a cusp outside the bars renders as a hairline spike at 32px.
+  const R = 2.6 * UNIT;
+  const ax = Math.abs(x - CENTRE) / R;
+  const ay = Math.abs(y - CENTRE) / R;
+  if (Math.pow(ax, 0.8) + Math.pow(ay, 0.8) <= 1) inGlyph = true;
+
+  if (inGlyph) {
+    r = 252;
+    g = 251;
+    b = 253;
   }
   return [r, g, b, 255];
 }
