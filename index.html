@@ -9,8 +9,50 @@
       content="Vesper — minimalist local music player for Windows."
     />
     <title>Vesper</title>
+    <style>
+      /* Boot screen. Static markup and CSS only, no script: it paints while the
+         webview is still starting React, which is where the empty window used
+         to sit on slower machines. main.tsx removes it once the app renders. */
+      html, body { margin: 0; height: 100%; background: #f9ffe5; }
+      #boot {
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; align-items: center; justify-content: center;
+        background:
+          radial-gradient(900px 520px at 8% -6%, #fdfff3 0%, transparent 58%),
+          radial-gradient(1000px 700px at 96% 108%, #e9f2bf 0%, transparent 62%),
+          #f9ffe5;
+        transition: opacity 180ms ease;
+      }
+      #boot.boot-out { opacity: 0; }
+      #boot .stack { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+      #boot .word { font-family: "Segoe UI", system-ui, sans-serif; font-size: 15px;
+                    letter-spacing: 0.22em; text-transform: uppercase;
+                    color: #4e5533; font-weight: 600; }
+      #boot .dot { width: 6px; height: 6px; border-radius: 50%; background: #09d6a0;
+                   animation: bootpulse 1100ms ease-in-out infinite; }
+      @keyframes bootpulse { 0%,100% { opacity: .25 } 50% { opacity: 1 } }
+      @media (prefers-reduced-motion: reduce) { #boot .dot { animation: none; opacity: .8 } }
+    </style>
   </head>
   <body>
+    <div id="boot" aria-hidden="true">
+      <div class="stack">
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" role="presentation">
+          <rect width="24" height="24" rx="5.25" fill="#141117" />
+          <g fill="#fcfbfd">
+            <rect x="3.600" y="10.650" width="1.5" height="2.7" rx="0.75" />
+            <rect x="18.900" y="10.650" width="1.5" height="2.7" rx="0.75" />
+            <rect x="6.150" y="9.150" width="1.5" height="5.7" rx="0.75" />
+            <rect x="16.350" y="9.150" width="1.5" height="5.7" rx="0.75" />
+            <rect x="8.700" y="7.200" width="1.5" height="9.6" rx="0.75" />
+            <rect x="13.800" y="7.200" width="1.5" height="9.6" rx="0.75" />
+            <rect x="11.250" y="5.400" width="1.5" height="13.2" rx="0.75" />
+          </g>
+        </svg>
+        <div class="word">Vesper</div>
+        <div class="dot"></div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
