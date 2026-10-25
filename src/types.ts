@@ -54,6 +54,8 @@ export interface UserPlaylist {
   name: string;
   trackIds: string[];
   createdAt: number;
+  /** Custom cover for the playlist as a whole (cached file path on Windows). */
+  artwork?: string | null;
 }
 
 export interface PlaybackState {
