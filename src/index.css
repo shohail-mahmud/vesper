@@ -1,26 +1,58 @@
-/* Self-hosted webfonts (latin subset). Bundled with the app so Vesper makes ZERO
-   network requests — no Google Fonts CDN call on launch.
-   These are variable fonts: one file per family covers every weight (100-900),
-   so two files (74 KB) replace eight static-looking ones (295 KB). */
+/* Self-hosted webfonts. Bundled with the app so Vesper makes ZERO network
+   requests — no Google Fonts CDN call on launch.
+
+   Display  : Delight (Regular) — headings, section titles, the wordmark.
+   Support  : Open Sauce One — everything else (UI, body, numerals).
+   Open Sauce One is SIL OFL 1.1 and shipped in public/fonts at 400/500/600/700,
+   so the declared weights resolve to real cut weights instead of faux bold. */
 @font-face {
-  font-family: "Inter";
+  font-family: "Delight";
   font-style: normal;
-  font-weight: 100 900;
+  font-weight: 400;
   font-display: swap;
-  src: url("/fonts/inter.woff2") format("woff2");
+  /* Delight by Rajesh Rajput — freeware, and the licence forbids modifying or
+     redistributing the font files, so we load the original .otf byte-for-byte.
+     No re-wrapped .woff2 is shipped for this face. */
+  src: url("/fonts/delight-regular.otf") format("opentype");
 }
 @font-face {
-  font-family: "Plus Jakarta Sans";
+  font-family: "Open Sauce One";
   font-style: normal;
-  font-weight: 200 800;
+  font-weight: 400;
   font-display: swap;
-  src: url("/fonts/plus-jakarta-sans.woff2") format("woff2");
+  /* OpenSauceOne-Regular.ttf is the file in public/fonts/; woff2 is the
+     re-wrapped copy. 500/600/700 come from the same OFL family so bold labels
+     use a real cut instead of faux bold. */
+  src: url("/fonts/opensauceone-400.woff2") format("woff2"),
+       url("/fonts/OpenSauceOne-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Open Sauce One";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/opensauceone-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Open Sauce One";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/opensauceone-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Open Sauce One";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/opensauceone-700.woff2") format("woff2");
 }
 
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Plus Jakarta Sans", "Inter", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-sans: "Open Sauce One", "Plus Jakarta Sans", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display: "Delight", "Open Sauce One", "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
   --color-paper: var(--bg-solid);
   --color-paper-2: var(--surface-solid);
   --color-ink: var(--text-primary);
@@ -28,30 +60,79 @@
   --color-ink-3: var(--text-muted);
   --color-rule: var(--border-subtle);
   --color-rule-soft: var(--border-soft);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-on: var(--accent-on);
+  --color-raised: var(--surface-raised);
 }
 
 :root {
-  --bg-solid: #f7f7f8;
-  --surface-solid: #ffffff;
-  --surface-hover: #f0f0f3;
-  --tile-outline: #18181b;
-  --text-primary: #141417;
-  --text-secondary: #52525b;
-  --text-muted: #71717a;
-  --border-subtle: rgba(24, 24, 27, 0.12);
-  --border-soft: rgba(24, 24, 27, 0.07);
+  /* ---- Vesper light theme: citrus paper -------------------------------
+     Base #f9ffe5 is deliberately NOT flat: the page carries a soft gradient
+     between two shades of the same hue, cards sit a step lighter, and every
+     border/ink tone is derived from a dark olive so nothing fights the paper.
+     `--accent` (#09d6a0) is the brand colour for fills and dots, but at 1.9:1
+     on this background it is too pale for icon strokes - `--accent-ink` is the
+     darker sibling used wherever the colour has to carry meaning at small size. */
+  --bg-solid: #f9ffe5;
+  --bg-wash-a: #fdfff3;
+  --bg-wash-b: #e9f2bf;
+  --bg-veil: #f4fbd9;
+  --surface-solid: #fdfff2;
+  --surface-raised: #fefff8;
+  --surface-hover: #edf4cf;
+  --tile-outline: #1e2a0f;
+  --text-primary: #1b220e;
+  --text-secondary: #4e5533;
+  --text-muted: #7d8560;
+  --border-subtle: rgba(27, 34, 14, 0.14);
+  --border-soft: rgba(27, 34, 14, 0.075);
+
+  /* Brand */
+  --accent: #09d6a0;
+  --accent-hover: #06c090;
+  --accent-soft: rgba(9, 214, 160, 0.16);
+  --accent-ring: rgba(9, 214, 160, 0.5);
+  /* Readable sibling for icons, thin graphics and text on pale paper */
+  --accent-ink: #04785c;
+  /* Foreground that sits *on* an accent fill */
+  --accent-on: #06251b;
+  --topbar-bg: rgba(253, 255, 243, 0.82);
 }
 
 [data-theme="dark"] {
-  --bg-solid: #121215;
-  --surface-solid: #1b1b20;
-  --surface-hover: #25252c;
-  --tile-outline: #e4e4e7;
-  --text-primary: #f4f4f6;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
-  --border-subtle: rgba(244, 244, 246, 0.14);
-  --border-soft: rgba(244, 244, 246, 0.08);
+  /* ---- Vesper dark theme: midnight navy -------------------------------
+     Base #002f4a, again not a flat fill: a lighter navy blooms top-left, the
+     page ramps down to a deeper navy bottom-right, and cards sit a step above
+     the ramp. Borders are cream-tinted so edges read as light, not shadow.
+     `--accent` (#fdf0d4) is the icon colour; on this navy it measures ~13:1,
+     so unlike the light theme it needs no darker sibling. */
+  --bg-solid: #002f4a;
+  --bg-wash-a: #01405f;
+  --bg-wash-b: #001c2c;
+  --bg-veil: #002a43;
+  --surface-solid: #013653;
+  --surface-raised: #023d5e;
+  --surface-hover: #054a70;
+  --tile-outline: #fdf0d4;
+  --text-primary: #fdf7ea;
+  --text-secondary: #a9c8d8;
+  --text-muted: #7b9cb0;
+  --border-subtle: rgba(253, 240, 212, 0.17);
+  --border-soft: rgba(253, 240, 212, 0.085);
+
+  /* Brand */
+  --accent: #fdf0d4;
+  --accent-hover: #fffaea;
+  --accent-soft: rgba(253, 240, 212, 0.14);
+  --accent-ring: rgba(253, 240, 212, 0.5);
+  /* Icons, thin graphics and small marks — already legible on navy */
+  --accent-ink: #fdf0d4;
+  /* Foreground that sits *on* a cream fill */
+  --accent-on: #002f4a;
+  --topbar-bg: rgba(0, 32, 50, 0.72);
 }
 
 @layer base {
@@ -64,9 +145,16 @@
   }
 
   body {
-    background: var(--bg-solid);
+    /* Depth comes from a two-stop wash of the same hue rather than one fill. */
+    /* Base is never a single flat fill: a light bloom, a deep corner and a
+       ramp between them, all shades of the theme's base colour. */
+    background:
+      radial-gradient(900px 520px at 8% -6%, var(--bg-wash-a) 0%, transparent 58%),
+      radial-gradient(1000px 700px at 96% 108%, var(--bg-wash-b) 0%, transparent 62%),
+      linear-gradient(163deg, var(--bg-wash-a) 0%, var(--bg-solid) 42%, var(--bg-wash-b) 100%);
+    background-attachment: fixed;
     color: var(--text-primary);
-    font-family: "Plus Jakarta Sans", "Inter", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-family: "Open Sauce One", "Plus Jakarta Sans", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
@@ -80,6 +168,18 @@
     background: transparent !important;
   }
 
+  /* Headings and the wordmark use the display face. `font-synthesis-weight: none`
+     keeps a Regular-only display file from being faux-bolded by a semibold class. */
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-synthesis-weight: none;
+    letter-spacing: -0.012em;
+  }
+
   button,
   input,
   select,
@@ -89,13 +189,13 @@
 
   button:focus-visible,
   a:focus-visible {
-    box-shadow: 0 0 0 2px rgba(120, 120, 140, 0.35);
+    box-shadow: 0 0 0 2px var(--accent-ring);
   }
 }
 
 /* Clean modern sans-serif tabular numbers (never monospace!) */
 .tnum {
-  font-family: "Plus Jakarta Sans", "Inter", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  font-family: "Open Sauce One", "Plus Jakarta Sans", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
   font-variant-numeric: tabular-nums lining-nums;
   letter-spacing: -0.01em;
 }
@@ -120,17 +220,16 @@
   justify-content: center;
   aspect-ratio: 1 / 1;
   width: 100%;
-  border: 1.75px solid var(--tile-outline);
-  border-radius: 14px;
-  background: var(--surface-solid);
+  border: 1.5px solid var(--tile-outline);
+  border-radius: 16px;
+  background: var(--surface-raised);
   color: var(--text-primary);
-  transition: background-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+  transition: background-color 140ms ease, transform 140ms ease, border-color 140ms ease;
 }
 
 .tile-square:hover {
   background: var(--surface-hover);
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
 }
 
 /* Visually distinct tile for individual loose tracks on Home */
@@ -176,13 +275,15 @@
 }
 
 .btn-primary {
-  background: var(--tile-outline);
-  color: var(--surface-solid);
-  border: 1.5px solid var(--tile-outline);
+  background: var(--accent);
+  color: var(--accent-on);
+  border: 1.5px solid var(--accent);
+  font-weight: 700;
 }
 
 .btn-primary:hover:not(:disabled) {
-  opacity: 0.88;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .btn-ghost {
@@ -201,17 +302,17 @@
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  color: var(--text-secondary);
+  color: var(--accent-ink);
   cursor: pointer;
   transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
 }
 
 .icon-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
 }
 
-/* Clean softly-rounded floating desktop widget — zero rectangular shadow bleed outside corners */
+/* Floating desktop widget — flat glass plate, no elevation shadow */
 .widget-pill {
   /* Glass opacity is applied to the smoked-glass BACKGROUND only (set from
      Settings → Widget → Glass opacity via --glass-a1/--glass-a2), so the title,
@@ -227,7 +328,6 @@
 }
 
 .widget-pill-preview {
-  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.26);
 }
 
 /* Smooth modern pill range slider */
@@ -259,7 +359,6 @@
   margin-top: calc((var(--track-h, 5px) - 12px) / 2);
   border-radius: 9999px;
   background: var(--thumb-bg, currentColor);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
   opacity: 0;
   transform: scale(0.85);
   transition: opacity 120ms ease, transform 120ms ease;
