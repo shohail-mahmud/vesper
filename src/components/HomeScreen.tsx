@@ -94,7 +94,7 @@ export function HomeScreen() {
               <div
                 role="menu"
                 aria-label="Import Music options"
-                className="rise absolute top-[calc(100%-22px)] left-0 z-40 mt-1.5 w-52 overflow-hidden rounded-[12px] border-[1.75px] border-[var(--tile-outline)] bg-paper-2 shadow-[0_14px_34px_rgba(0,0,0,0.16)]"
+                className="rise absolute top-[calc(100%-22px)] left-0 z-40 mt-1.5 w-52 overflow-hidden rounded-[12px] border-[1.75px] border-[var(--tile-outline)] bg-paper-2"
               >
                 <button
                   type="button"
@@ -299,7 +299,7 @@ export function HomeScreen() {
                         }}
                         title={track.favorite ? "Unfavorite" : "Favorite"}
                         aria-label={track.favorite ? "Remove from favorites" : "Add to favorites"}
-                        className={`icon-btn absolute top-2 left-2 h-6 w-6 rounded-full bg-paper-2/92 shadow-xs transition-opacity ${
+                        className={`icon-btn absolute top-2 left-2 h-6 w-6 rounded-full bg-paper-2/92 transition-opacity ${
                           track.favorite ? "opacity-100 text-[#D93848]" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
                         }`}
                       >
@@ -316,7 +316,7 @@ export function HomeScreen() {
                         }}
                         title={art ? "Change cover (Shift+Click to remove cover)" : "Add song cover"}
                         aria-label={`Set cover image for ${track.title}`}
-                        className="icon-btn absolute bottom-2 left-2 h-6 w-6 rounded-full bg-paper-2/92 opacity-0 shadow-xs transition-opacity group-hover:opacity-100 focus:opacity-100"
+                        className="icon-btn absolute bottom-2 left-2 h-6 w-6 rounded-full bg-paper-2/92 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
                       >
                         <I.ImagePlus size={12} />
                       </button>
@@ -330,7 +330,7 @@ export function HomeScreen() {
                         }}
                         title="Add to queue"
                         aria-label={`Add ${track.title} to queue`}
-                        className="icon-btn absolute right-2 bottom-2 h-6 w-6 rounded-full bg-paper-2/92 opacity-0 shadow-xs transition-opacity group-hover:opacity-100 focus:opacity-100"
+                        className="icon-btn absolute right-2 bottom-2 h-6 w-6 rounded-full bg-paper-2/92 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
                       >
                         <I.ListPlus size={13} />
                       </button>
@@ -344,7 +344,7 @@ export function HomeScreen() {
                         }}
                         title="Remove from library (file stays on disk)"
                         aria-label={`Remove ${track.title} from library`}
-                        className="icon-btn absolute top-2 right-2 h-6 w-6 rounded-full bg-paper-2/92 opacity-0 shadow-xs transition-opacity group-hover:opacity-100 focus:opacity-100"
+                        className="icon-btn absolute top-2 right-2 h-6 w-6 rounded-full bg-paper-2/92 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
                       >
                         <I.X size={12} />
                       </button>
