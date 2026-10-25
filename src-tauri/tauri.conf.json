@@ -65,8 +65,8 @@
     ],
     "publisher": "Shohail Mahmud",
     "copyright": "\u00a9 2026 Shohail Mahmud. All rights reserved.",
-    "shortDescription": "Minimalist local music player for Windows with custom covers, native EQ, synced lyrics, and round desktop widget.",
-    "longDescription": "Vesper plays the music files already on your machine. Add permanent custom cover art to any song, import folders or tracks, control playback with hardware media keys, 10-band native equalizer, synced lyrics, system tray, and a sleek round floating desktop widget.",
+    "shortDescription": "Minimalist local music player for Windows with custom covers, native EQ, synced lyrics, and a floating desktop widget.",
+    "longDescription": "Vesper plays the music files already on your machine. Add permanent custom cover art to any song, import folders or tracks, control playback with hardware media keys, 10-band native equalizer, synced lyrics, and a floating desktop widget.",
     "category": "Music",
     "icon": [
       "icons/32x32.png",
