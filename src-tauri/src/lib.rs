@@ -100,6 +100,57 @@ const SCREEN_MARGIN: f64 = 12.0;
 const ABSOLUTE_FLOOR_W: f64 = 640.0;
 const ABSOLUTE_FLOOR_H: f64 = 420.0;
 
+/// Where the last fitted window size is remembered between launches.
+///
+/// One small text file next to the database, holding the size that was fitted
+/// for a particular screen. Reading it is a single tiny file read, far cheaper
+/// than repeating the measure and the maths on every start, and it means the
+/// first launch does the analysis and every later launch just applies the
+/// answer.
+fn window_cache_file() -> Option<std::path::PathBuf> {
+    dirs::data_dir().map(|dir| dir.join("Vesper").join("window-size.txt"))
+}
+
+/// width, height, screen width, screen height, scale factor of the screen the
+/// size was fitted for. The screen values are what make the cache safe: if the
+/// laptop is docked to a bigger monitor, or the display scaling changes, the
+/// stored numbers no longer match and the window is fitted again.
+struct WindowCache {
+    width: f64,
+    height: f64,
+    screen_w: f64,
+    screen_h: f64,
+    scale: f64,
+}
+
+fn read_window_cache() -> Option<WindowCache> {
+    let text = std::fs::read_to_string(window_cache_file()?).ok()?;
+    let mut parts = text.trim().split(',');
+    let width = parts.next()?.trim().parse::<f64>().ok()?;
+    let height = parts.next()?.trim().parse::<f64>().ok()?;
+    let screen_w = parts.next()?.trim().parse::<f64>().ok()?;
+    let screen_h = parts.next()?.trim().parse::<f64>().ok()?;
+    let scale = parts.next()?.trim().parse::<f64>().ok()?;
+    if width < 1.0 || height < 1.0 || scale <= 0.0 {
+        return None;
+    }
+    Some(WindowCache { width, height, screen_w, screen_h, scale })
+}
+
+fn write_window_cache(cache: &WindowCache) {
+    let Some(path) = window_cache_file() else {
+        return;
+    };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let line = format!(
+        "{:.0},{:.0},{:.0},{:.0},{:.4}",
+        cache.width, cache.height, cache.screen_w, cache.screen_h, cache.scale
+    );
+    let _ = std::fs::write(path, line);
+}
+
 /// Keep the main window inside the usable area of the screen it opens on.
 ///
 /// The configured size is 1180 x 800. A desktop monitor has room for that, but
@@ -107,22 +158,22 @@ const ABSOLUTE_FLOOR_H: f64 = 420.0;
 /// only about 728 px of height remains, the window hangs off the bottom and the
 /// player bar ends up under the taskbar.
 ///
-/// Three things make this correct rather than approximate:
+/// The analysis runs on the first launch and whenever the screen changes, then
+/// the answer is written to `window-size.txt`. Every later launch reads that
+/// file and applies the stored size directly: one small read, no measuring, no
+/// maths. So the first start analyses, and the rest are immediate.
+///
+/// Three things make the fit correct rather than approximate:
 ///
 ///  1. Work area, not screen size. `work_area()` already excludes the taskbar
-///     and any docked toolbars, which is exactly the space a normal window may
-///     occupy.
-///  2. Display scaling. Sizes are converted to logical pixels before comparing,
-///     because at 125 percent or 150 percent scaling the screen is far smaller
-///     in logical pixels than its resolution suggests, and the configured
-///     minimum of 840 x 560 can itself be larger than the whole screen.
-///  3. The minimum size is lowered first. A window whose minimum is bigger than
-///     the screen silently refuses to shrink, which is how a "fixed" window
-///     still ends up clipped. Lowering the minimum before resizing is what
-///     makes the fit actually happen at high DPI.
-///
-/// On a screen with room to spare this does nothing at all: the width and the
-/// height both stay at the configured values.
+///     and any docked toolbars, which is exactly the space a window may occupy.
+///  2. Display scaling. Sizes are converted to logical pixels first, because at
+///     125 or 150 percent the screen is far smaller in logical pixels than its
+///     resolution suggests, and the configured minimum of 840 x 560 can itself
+///     be larger than the whole screen.
+///  3. The minimum size is lowered before the resize. A window whose minimum is
+///     bigger than the screen silently refuses to shrink, which is how a
+///     "fixed" window still ends up clipped at high DPI.
 fn fit_main_window_to_screen(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
         return;
@@ -144,21 +195,40 @@ fn fit_main_window_to_screen(app: &tauri::AppHandle) {
         return;
     }
 
-    // Space a window may occupy, minus a small breathing gap on each side.
-    let limit_w = (avail_w - SCREEN_MARGIN * 2.0).max(ABSOLUTE_FLOOR_W);
-    let limit_h = (avail_h - SCREEN_MARGIN * 2.0).max(ABSOLUTE_FLOOR_H);
+    // Fast path: this screen was measured before, so reuse that answer.
+    let mut cache = read_window_cache();
+    let reusable = cache.as_ref().is_some_and(|c| {
+        (c.screen_w - avail_w).abs() < 2.0
+            && (c.screen_h - avail_h).abs() < 2.0
+            && (c.scale - scale).abs() < 0.01
+    });
 
-    // Never larger than the preferred size, never larger than the screen.
-    let width = MAIN_PREFERRED_W.min(limit_w);
-    let height = MAIN_PREFERRED_H.min(limit_h);
+    if !reusable {
+        // Slow path: first launch on this screen, or the screen changed.
+        let limit_w = (avail_w - SCREEN_MARGIN * 2.0).max(ABSOLUTE_FLOOR_W);
+        let limit_h = (avail_h - SCREEN_MARGIN * 2.0).max(ABSOLUTE_FLOOR_H);
+        let fitted = WindowCache {
+            width: MAIN_PREFERRED_W.min(limit_w),
+            height: MAIN_PREFERRED_H.min(limit_h),
+            screen_w: avail_w,
+            screen_h: avail_h,
+            scale,
+        };
+        write_window_cache(&fitted);
+        cache = Some(fitted);
+    }
+
+    let Some(size) = cache else {
+        return;
+    };
 
     // Drop the minimum first when the screen cannot hold it, otherwise the
     // resize below is ignored by the window manager.
-    let min_w = width.min(MAIN_MIN_W);
-    let min_h = height.min(MAIN_MIN_H);
+    let min_w = size.width.min(MAIN_MIN_W);
+    let min_h = size.height.min(MAIN_MIN_H);
     let _ = window.set_min_size(Some(tauri::LogicalSize::new(min_w, min_h)));
 
-    let _ = window.set_size(tauri::LogicalSize::new(width, height));
+    let _ = window.set_size(tauri::LogicalSize::new(size.width, size.height));
     let _ = window.center();
 }
 
@@ -170,8 +240,14 @@ pub fn run() {
             configure_windows_dwm(app.handle());
 
             // The main window is created hidden (see tauri.conf.json). Size it
-            // against the screen first, then reveal it, so the wrong size is
-            // never painted: no grow-then-shrink jump on launch.
+            // first, then reveal it, so the wrong size is never painted: no
+            // grow-then-shrink jump on launch.
+            //
+            // This happens before the database is opened on purpose. Opening
+            // SQLite and running migrations is the slowest single step of
+            // startup, and revealing the window first lets the webview paint
+            // the boot screen while that work finishes in the background,
+            // instead of the user staring at nothing.
             fit_main_window_to_screen(app.handle());
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
